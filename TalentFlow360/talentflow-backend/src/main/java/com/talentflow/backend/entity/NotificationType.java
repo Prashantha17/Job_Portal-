@@ -1,0 +1,12 @@
+package com.talentflow.backend.entity;
+
+public enum NotificationType {
+    APPLICATION_STATUS_UPDATED,
+    JOB_APPLICATION_RECEIVED,
+    INTERVIEW_SCHEDULED,
+    INTERVIEW_RESCHEDULED,
+    INTERVIEW_FEEDBACK_SUBMITTED,
+    OFFER_RELEASED,
+    SYSTEM_ALERT
+}
+
