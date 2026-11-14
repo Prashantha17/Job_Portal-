@@ -10,6 +10,8 @@ import com.talentflow.backend.repository.NotificationRepository;
 import com.talentflow.backend.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,9 +28,16 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
 
+    @Autowired(required = false)
+    private SimpMessagingTemplate messagingTemplate;
+
     public NotificationService(NotificationRepository notificationRepository, UserRepository userRepository) {
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
+    }
+
+    public void setMessagingTemplate(SimpMessagingTemplate messagingTemplate) {
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Transactional
@@ -42,6 +51,10 @@ public class NotificationService {
         Notification notification = new Notification(recipient, title, message, type, actionUrl, metadata);
         Notification saved = notificationRepository.save(notification);
         log.info("🔔 Created in-app notification #{} for user '{}' [{}]", saved.getId(), recipient.getEmail(), type);
+
+        // Push real-time notification over WebSocket
+        pushRealtimeNotification(saved);
+
         return saved;
     }
 
@@ -116,6 +129,31 @@ public class NotificationService {
         }
 
         notificationRepository.delete(notification);
+    }
+
+    public void pushRealtimeNotification(Notification notification) {
+        if (messagingTemplate == null || notification == null || notification.getRecipient() == null) {
+            return;
+        }
+
+        try {
+            NotificationResponse response = toResponse(notification);
+            String recipientEmail = notification.getRecipient().getEmail().toLowerCase().trim();
+
+            // 1. Send targeted notification to user private queue
+            messagingTemplate.convertAndSendToUser(recipientEmail, "/queue/notifications", response);
+
+            // 2. Push updated unread badge count to user private queue
+            long unread = notificationRepository.countByRecipientEmailAndReadFalse(recipientEmail);
+            messagingTemplate.convertAndSendToUser(recipientEmail, "/queue/unread-count", unread);
+
+            // 3. Broadcast to general channel
+            messagingTemplate.convertAndSend("/topic/notifications", response);
+
+            log.info("📡 Pushed real-time WebSocket notification #{} to '{}'", notification.getId(), recipientEmail);
+        } catch (Exception ex) {
+            log.warn("Failed to push real-time WebSocket notification: {}", ex.getMessage());
+        }
     }
 
     public NotificationResponse toResponse(Notification n) {

@@ -40,6 +40,17 @@ export const notificationService = {
   async deleteNotification(id: number): Promise<void> {
     await apiClient.delete(`/api/v1/notifications/${id}`);
   },
+
+  /**
+   * Send a test notification that broadcasts over WebSocket in real time
+   */
+  async sendTestNotification(title?: string, message?: string): Promise<NotificationItem> {
+    const params = new URLSearchParams();
+    if (title) params.append('title', title);
+    if (message) params.append('message', message);
+    const response = await apiClient.post(`/api/v1/notifications/test?${params.toString()}`);
+    return response.data.data;
+  },
 };
 
 export default notificationService;

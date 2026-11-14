@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { Navbar, AppView } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { LandingPage } from './pages/LandingPage';
@@ -10,6 +11,7 @@ import { ResumeBuilder } from './pages/ResumeBuilder';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { AuthModal } from './components/auth/AuthModal';
+import { LiveToastContainer } from './components/notification/LiveToastContainer';
 
 const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>('home');
@@ -104,7 +106,10 @@ const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <AuthProvider>
-      <AppContent />
+      <NotificationProvider>
+        <AppContent />
+        <LiveToastContainer />
+      </NotificationProvider>
     </AuthProvider>
   );
 };

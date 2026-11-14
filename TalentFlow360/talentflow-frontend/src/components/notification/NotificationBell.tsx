@@ -1,48 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Bell, CheckCheck, Trash2, Calendar, Award, UserCheck,
-  Briefcase, Sparkles, BellOff, X
+  Briefcase, Sparkles, BellOff, X, Zap, RefreshCw
 } from 'lucide-react';
 import { NotificationItem } from '../../types/notification';
-import notificationService from '../../services/notificationService';
+import { useNotifications } from '../../context/NotificationContext';
 
 interface NotificationBellProps {
   onNavigate?: (url: string) => void;
 }
 
 export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }) => {
+  const {
+    notifications,
+    unreadCount,
+    isWsConnected,
+    loading,
+    fetchNotifications,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+    sendTestAlert,
+  } = useNotifications();
+
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
-  const [loading, setLoading] = useState(false);
+  const [testSending, setTestSending] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const fetchNotifications = async () => {
-    try {
-      setLoading(true);
-      const data = await notificationService.getNotifications();
-      setNotifications(data.notifications || []);
-      setUnreadCount(data.unreadCount || 0);
-    } catch (err) {
-      // Graceful fallback for offline / unauthenticated states
-      console.warn('Failed to load notifications:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Initial fetch and periodic polling (every 30 seconds)
-  useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(() => {
-      notificationService.getUnreadCount()
-        .then(count => setUnreadCount(count))
-        .catch(() => {});
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   // Close on outside click
   useEffect(() => {
@@ -65,54 +49,10 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
     setIsOpen(!isOpen);
   };
 
-  const handleMarkAsRead = async (item: NotificationItem, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (item.read) return;
-
-    try {
-      await notificationService.markAsRead(item.id);
-      setNotifications(prev =>
-        prev.map(n => (n.id === item.id ? { ...n, read: true } : n))
-      );
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (err) {
-      console.warn('Failed to mark notification as read:', err);
-    }
-  };
-
-  const handleMarkAllAsRead = async () => {
-    try {
-      await notificationService.markAllAsRead();
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      setUnreadCount(0);
-    } catch (err) {
-      console.warn('Failed to mark all notifications as read:', err);
-    }
-  };
-
-  const handleDelete = async (id: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await notificationService.deleteNotification(id);
-      const deletedItem = notifications.find(n => n.id === id);
-      setNotifications(prev => prev.filter(n => n.id !== id));
-      if (deletedItem && !deletedItem.read) {
-        setUnreadCount(prev => Math.max(0, prev - 1));
-      }
-    } catch (err) {
-      console.warn('Failed to delete notification:', err);
-    }
-  };
-
-  const handleClickItem = (item: NotificationItem) => {
+  const handleItemClick = async (item: NotificationItem) => {
     if (!item.read) {
-      notificationService.markAsRead(item.id).catch(() => {});
-      setNotifications(prev =>
-        prev.map(n => (n.id === item.id ? { ...n, read: true } : n))
-      );
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      await markAsRead(item.id);
     }
-
     setIsOpen(false);
 
     if (item.actionUrl) {
@@ -121,6 +61,18 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
       } else {
         window.location.hash = item.actionUrl;
       }
+    }
+  };
+
+  const handleSendTestNotification = async () => {
+    try {
+      setTestSending(true);
+      await sendTestAlert(
+        'Live WebSocket Alert ⚡',
+        'Your STOMP real-time notification channel is live! Instant updates are active.'
+      );
+    } finally {
+      setTestSending(false);
     }
   };
 
@@ -161,7 +113,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
     }
   };
 
-  const filteredNotifications = notifications.filter(n => {
+  const filteredNotifications = notifications.filter((n) => {
     if (activeTab === 'unread') return !n.read;
     return true;
   });
@@ -172,10 +124,18 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
       <button
         onClick={handleToggle}
         className="relative p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-        title="Notifications"
+        title={isWsConnected ? 'Notifications (Real-Time Live WebSocket)' : 'Notifications'}
         aria-label="Open notifications"
       >
         <Bell className="w-5 h-5" />
+
+        {/* Real-time live pulse badge indicator */}
+        {isWsConnected && (
+          <span
+            className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"
+            title="Live WebSocket Connected"
+          />
+        )}
 
         {/* Unread Badge Counter */}
         {unreadCount > 0 && (
@@ -189,150 +149,172 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
       {isOpen && (
         <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200/90 z-50 overflow-hidden animate-fadeIn">
           {/* Header */}
-          <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Notifications</h3>
-              {unreadCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-100 text-brand-700">
-                  {unreadCount} new
-                </span>
-              )}
+          <div className="p-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-extrabold text-sm text-slate-900">Notifications</h3>
+                {isWsConnected ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Live WS
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
+                    Polling
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {unreadCount > 0 ? `${unreadCount} unread update${unreadCount > 1 ? 's' : ''}` : 'All caught up'}
+              </p>
             </div>
 
             <div className="flex items-center gap-1">
               {unreadCount > 0 && (
                 <button
-                  onClick={handleMarkAllAsRead}
+                  onClick={markAllAsRead}
                   className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-800 px-2 py-1 rounded-lg hover:bg-brand-50 transition-colors cursor-pointer"
                   title="Mark all as read"
                 >
                   <CheckCheck className="w-3.5 h-3.5" />
-                  <span>Mark all read</span>
+                  <span>Mark read</span>
                 </button>
               )}
               <button
                 onClick={() => setIsOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* Filter Tabs */}
-          <div className="flex border-b border-slate-100 bg-white px-3 pt-2 gap-2 text-xs font-bold text-slate-600">
+          {/* Quick Action Toolbar: Test Live Alert & Tabs */}
+          <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/40 flex items-center justify-between">
+            {/* Filter Tabs */}
+            <div className="flex gap-1 text-xs font-bold">
+              <button
+                onClick={() => setActiveTab('all')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  activeTab === 'all'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                All ({notifications.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('unread')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  activeTab === 'unread'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Unread ({unreadCount})
+              </button>
+            </div>
+
+            {/* Test Push Button */}
             <button
-              onClick={() => setActiveTab('all')}
-              className={`pb-2 px-2 border-b-2 transition-all cursor-pointer ${
-                activeTab === 'all'
-                  ? 'border-brand-600 text-brand-600'
-                  : 'border-transparent hover:text-slate-900'
-              }`}
+              onClick={handleSendTestNotification}
+              disabled={testSending}
+              className="text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg inline-flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+              title="Send a real-time WebSocket push alert to test your connection"
             >
-              All ({notifications.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('unread')}
-              className={`pb-2 px-2 border-b-2 transition-all cursor-pointer ${
-                activeTab === 'unread'
-                  ? 'border-brand-600 text-brand-600'
-                  : 'border-transparent hover:text-slate-900'
-              }`}
-            >
-              Unread ({unreadCount})
+              <Zap className="w-3 h-3 text-amber-600 fill-amber-600" />
+              <span>{testSending ? 'Pinging...' : 'Test Live Push'}</span>
             </button>
           </div>
 
-          {/* Notification List Body */}
-          <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100">
+          {/* Notification Items List */}
+          <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100">
             {loading && notifications.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400">
+              <div className="py-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-brand-600" />
                 Loading notifications...
               </div>
             ) : filteredNotifications.length === 0 ? (
-              <div className="p-8 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
-                  <BellOff className="w-6 h-6" />
-                </div>
-                <p className="text-xs font-bold text-slate-700">All caught up!</p>
+              <div className="py-12 text-center text-slate-400">
+                <BellOff className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                <p className="text-xs font-semibold">No notifications</p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  {activeTab === 'unread'
-                    ? 'No unread notifications at the moment.'
-                    : 'You have no notifications right now.'}
+                  {activeTab === 'unread' ? 'You have read all your alerts!' : 'Updates and alerts will appear here in real-time.'}
                 </p>
               </div>
             ) : (
-              filteredNotifications.map((item) => (
+              filteredNotifications.map((n) => (
                 <div
-                  key={item.id}
-                  onClick={() => handleClickItem(item)}
-                  className={`p-3.5 flex items-start gap-3 transition-colors cursor-pointer group hover:bg-slate-50 ${
-                    !item.read ? 'bg-brand-50/30' : ''
+                  key={n.id}
+                  onClick={() => handleItemClick(n)}
+                  className={`p-3.5 flex items-start gap-3 hover:bg-slate-50/80 transition-colors cursor-pointer relative group ${
+                    !n.read ? 'bg-brand-50/25' : ''
                   }`}
                 >
-                  {getNotificationIcon(item.type)}
+                  {/* Icon */}
+                  {getNotificationIcon(n.type)}
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1 mb-0.5">
-                      <h4 className={`text-xs tracking-tight truncate ${
-                        !item.read ? 'font-black text-slate-900' : 'font-bold text-slate-800'
-                      }`}>
-                        {item.title}
+                  {/* Body Content */}
+                  <div className="flex-1 min-w-0 pr-6">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <h4 className={`text-xs font-bold leading-tight truncate ${!n.read ? 'text-slate-900' : 'text-slate-700'}`}>
+                        {n.title}
                       </h4>
-                      <span className="text-[10px] font-medium text-slate-400 shrink-0">
-                        {item.timeAgo}
-                      </span>
                     </div>
 
-                    <p className="text-[11.5px] text-slate-600 line-clamp-2 leading-relaxed">
-                      {item.message}
+                    <p className="text-[11px] text-slate-600 line-clamp-2 mt-0.5 leading-relaxed">
+                      {n.message}
                     </p>
 
-                    <div className="flex items-center justify-between mt-2 pt-1">
-                      {item.actionUrl ? (
-                        <span className="text-[10px] font-bold text-brand-600 group-hover:underline">
-                          View details &rarr;
-                        </span>
-                      ) : (
-                        <span></span>
+                    <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-400">
+                      <span>{n.timeAgo || 'Recently'}</span>
+                      {n.actionUrl && (
+                        <>
+                          <span>&bull;</span>
+                          <span className="text-brand-600 font-semibold group-hover:underline">
+                            Click to open
+                          </span>
+                        </>
                       )}
-
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {!item.read && (
-                          <button
-                            onClick={(e) => handleMarkAsRead(item, e)}
-                            className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800 text-[10px] font-medium"
-                            title="Mark as read"
-                          >
-                            Mark read
-                          </button>
-                        )}
-                        <button
-                          onClick={(e) => handleDelete(item.id, e)}
-                          className="p-1 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600"
-                          title="Dismiss notification"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
                     </div>
                   </div>
 
-                  {!item.read && (
-                    <span className="w-2 h-2 rounded-full bg-brand-600 shrink-0 mt-1.5" />
+                  {/* Actions (Mark as read / delete) */}
+                  <div className="absolute right-3 top-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {!n.read && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markAsRead(n.id);
+                        }}
+                        className="p-1 rounded-md text-slate-400 hover:text-brand-600 hover:bg-white transition-colors"
+                        title="Mark as read"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteNotification(n.id);
+                      }}
+                      className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-white transition-colors"
+                      title="Delete notification"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Unread indicator dot */}
+                  {!n.read && (
+                    <span className="absolute right-3 top-4 w-2 h-2 rounded-full bg-brand-600 ring-2 ring-brand-100 group-hover:opacity-0 transition-opacity" />
                   )}
                 </div>
               ))
             )}
-          </div>
-
-          {/* Footer */}
-          <div className="p-2.5 bg-slate-50 border-t border-slate-100 text-center text-[10.5px] text-slate-400 font-medium">
-            TalentFlow 360 Notification Center
           </div>
         </div>
       )}
     </div>
   );
 };
-

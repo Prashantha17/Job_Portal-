@@ -84,6 +84,12 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
+        <!-- Spring Boot WebSocket for Real-Time Notification Push -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
         <!-- OpenAPI / Swagger 3 -->
         <dependency>
             <groupId>org.springdoc</groupId>

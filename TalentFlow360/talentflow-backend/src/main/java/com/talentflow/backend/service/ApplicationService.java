@@ -151,6 +151,20 @@ public class ApplicationService {
                         "#recruiter-hub",
                         "appId=" + savedApp.getId()
                 );
+
+                // Dispatch email to recruiter
+                try {
+                    emailService.sendRecruiterNewApplicationEmail(
+                            job.getPostedBy().getEmail(),
+                            job.getPostedBy().getFullName(),
+                            candidateName,
+                            job.getTitle(),
+                            companyName,
+                            savedApp.getId()
+                    );
+                } catch (Exception ex) {
+                    log.warn("Failed to dispatch recruiter email notification: {}", ex.getMessage());
+                }
             }
         } catch (Exception ex) {
             log.warn("Failed to dispatch in-app notification on application submit: {}", ex.getMessage());
@@ -218,14 +232,37 @@ public class ApplicationService {
                         ? saved.getJob().getCompany().getName()
                         : "TalentFlow Enterprise";
                 try {
-                    emailService.sendApplicationStatusUpdateEmail(
-                            candidateEmail,
-                            candidateName,
-                            jobTitle,
-                            companyName,
-                            newStatus.name(),
-                            req.getRemarks()
-                    );
+                    if (newStatus == ApplicationStatus.OFFER_RELEASED) {
+                        Double offeredSalary = saved.getExpectedCtcLpa() != null
+                                ? saved.getExpectedCtcLpa()
+                                : (saved.getJob() != null ? saved.getJob().getMaxSalary() : null);
+                        emailService.sendOfferLetterEmail(
+                                candidateEmail,
+                                candidateName,
+                                jobTitle,
+                                companyName,
+                                offeredSalary,
+                                "Immediate / As agreed",
+                                req.getRemarks()
+                        );
+                    } else if (newStatus == ApplicationStatus.REJECTED) {
+                        emailService.sendApplicationRejectionEmail(
+                                candidateEmail,
+                                candidateName,
+                                jobTitle,
+                                companyName,
+                                req.getRemarks()
+                        );
+                    } else {
+                        emailService.sendApplicationStatusUpdateEmail(
+                                candidateEmail,
+                                candidateName,
+                                jobTitle,
+                                companyName,
+                                newStatus.name(),
+                                req.getRemarks()
+                        );
+                    }
                 } catch (Exception ex) {
                     log.warn("Failed to dispatch status update email: {}", ex.getMessage());
                 }

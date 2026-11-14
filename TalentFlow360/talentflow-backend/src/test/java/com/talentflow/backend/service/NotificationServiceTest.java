@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.Instant;
 import java.util.List;
@@ -33,6 +34,9 @@ class NotificationServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private SimpMessagingTemplate messagingTemplate;
 
     @InjectMocks
     private NotificationService notificationService;
@@ -142,6 +146,37 @@ class NotificationServiceTest {
         notificationService.deleteNotification(9L, "alex.morgan@example.com");
 
         verify(notificationRepository, times(1)).delete(n);
+    }
+
+    @Test
+    @DisplayName("createNotification pushes real-time WebSocket event via SimpMessagingTemplate")
+    void testCreateNotification_PushesWebSocketEvent() {
+        notificationService.setMessagingTemplate(messagingTemplate);
+        Notification notification = new Notification(testUser, "Live Alert", "Real-time message", NotificationType.SYSTEM_ALERT, "#home", null);
+        notification.setId(10L);
+
+        when(notificationRepository.save(any(Notification.class))).thenReturn(notification);
+        when(notificationRepository.countByRecipientEmailAndReadFalse("alex.morgan@example.com")).thenReturn(3L);
+
+        Notification result = notificationService.createNotification(
+                testUser, "Live Alert", "Real-time message", NotificationType.SYSTEM_ALERT, "#home", null
+        );
+
+        assertNotNull(result);
+        verify(messagingTemplate, times(1)).convertAndSendToUser(
+                eq("alex.morgan@example.com"),
+                eq("/queue/notifications"),
+                any(NotificationResponse.class)
+        );
+        verify(messagingTemplate, times(1)).convertAndSendToUser(
+                eq("alex.morgan@example.com"),
+                eq("/queue/unread-count"),
+                eq(3L)
+        );
+        verify(messagingTemplate, times(1)).convertAndSend(
+                eq("/topic/notifications"),
+                any(NotificationResponse.class)
+        );
     }
 }
 

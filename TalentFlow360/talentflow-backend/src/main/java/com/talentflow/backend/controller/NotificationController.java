@@ -79,5 +79,24 @@ public class NotificationController {
         notificationService.deleteNotification(id, email);
         return ResponseEntity.ok(ApiResponse.ok("Notification removed", null));
     }
+
+    @PostMapping("/test")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Send a live real-time test notification over WebSocket")
+    public ResponseEntity<ApiResponse<NotificationResponse>> sendTestNotification(
+            @RequestParam(defaultValue = "Real-Time Test Alert ⚡") String title,
+            @RequestParam(defaultValue = "Your WebSocket connection is active and receiving live events!") String message,
+            Authentication authentication) {
+        String email = getAuthenticatedEmail(authentication);
+        com.talentflow.backend.entity.Notification created = notificationService.createNotification(
+                email,
+                title,
+                message,
+                com.talentflow.backend.entity.NotificationType.SYSTEM_ALERT,
+                "#home",
+                "test=true"
+        );
+        return ResponseEntity.ok(ApiResponse.ok("Real-time test notification dispatched", notificationService.toResponse(created)));
+    }
 }
 
