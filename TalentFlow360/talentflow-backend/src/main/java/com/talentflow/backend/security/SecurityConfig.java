@@ -82,7 +82,7 @@ public class SecurityConfig {
                         // Role-specific endpoint rules
                         .requestMatchers("/api/v1/admin/**").hasRole("SUPER_ADMIN")
                         .requestMatchers("/api/v1/hr/**").hasAnyRole("HR_MANAGER", "SUPER_ADMIN")
-                        .requestMatchers("/api/v1/recruiter/**", "/api/v1/recruiters/**").hasAnyRole("RECRUITER", "HR_MANAGER", "SUPER_ADMIN")
+                        .requestMatchers("/api/v1/recruiter/**", "/api/v1/recruiters/**", "/api/v1/analytics/**").hasAnyRole("RECRUITER", "HR_MANAGER", "SUPER_ADMIN")
                         .requestMatchers("/api/v1/candidates/**", "/api/v1/candidate/**").hasAnyRole("JOB_SEEKER", "SUPER_ADMIN")
 
                         // All other endpoints require authentication

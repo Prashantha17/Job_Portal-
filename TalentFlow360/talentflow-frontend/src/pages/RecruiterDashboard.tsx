@@ -5,7 +5,8 @@ import {
   ShieldCheck, X, LogIn, Trash2,
   MapPin, FileText, Clock,
   History, CheckCircle2, Send, Filter,
-  Calendar, Video, Star, ExternalLink
+  Calendar, Video, Star, ExternalLink,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import profileService, { RecruiterProfile, UpdateRecruiterProfilePayload } from '../services/profileService';
@@ -30,6 +31,7 @@ import {
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 import { formatLPA } from '../utils/currencyFormatter';
+import { RecruitmentAnalyticsDashboard } from '../components/analytics/RecruitmentAnalyticsDashboard';
 
 interface RecruiterDashboardProps {
   onBackToHome?: () => void;
@@ -245,7 +247,7 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
   // Interview Management State & Handlers
   const [recruiterInterviews, setRecruiterInterviews] = useState<InterviewResponse[]>([]);
   const [loadingInterviews, setLoadingInterviews] = useState(false);
-  const [activeViewTab, setActiveViewTab] = useState<'vacancies' | 'interviews'>('vacancies');
+  const [activeViewTab, setActiveViewTab] = useState<'vacancies' | 'interviews' | 'analytics'>('vacancies');
   const [interviewNotificationMsg, setInterviewNotificationMsg] = useState<string | null>(null);
 
   // Schedule Modal State
@@ -671,7 +673,7 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
           <p className="text-[11px] text-slate-400 mt-1">Managed positions</p>
         </Card>
 
-        <Card className="p-5 border-l-4 border-l-purple-600">
+        <Card className="p-5 border-l-4 border-l-purple-600 cursor-pointer hover:bg-purple-50/20 transition-colors" onClick={() => setActiveViewTab('analytics')}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Applicants</span>
             <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
@@ -710,11 +712,11 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
         </div>
       )}
 
-      {/* SECTION TABS: VACANCIES vs INTERVIEWS */}
-      <div className="flex items-center gap-2 border-b border-slate-200 mb-6">
+      {/* SECTION TABS: VACANCIES vs INTERVIEWS vs ANALYTICS */}
+      <div className="flex items-center gap-2 border-b border-slate-200 mb-6 overflow-x-auto">
         <button
           onClick={() => setActiveViewTab('vacancies')}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeViewTab === 'vacancies'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -727,13 +729,23 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
             setActiveViewTab('interviews');
             fetchRecruiterInterviews();
           }}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeViewTab === 'interviews'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Video className="w-4 h-4 text-brand-600" /> Interviews & Scheduling Calendar ({recruiterInterviews.length})
+          <Video className="w-4 h-4 text-brand-600" /> Interviews & Calendar ({recruiterInterviews.length})
+        </button>
+        <button
+          onClick={() => setActiveViewTab('analytics')}
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeViewTab === 'analytics'
+              ? 'border-brand-600 text-brand-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4 text-brand-600" /> Talent Analytics & Funnel 📊
         </button>
       </div>
 
@@ -1008,6 +1020,21 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* VIEW TAB 3: RECRUITMENT ANALYTICS & ATS FUNNEL INTELLIGENCE */}
+      {activeViewTab === 'analytics' && (
+        <div className="mb-12">
+          <RecruitmentAnalyticsDashboard
+            onSelectJobForApplicants={(jobId) => {
+              const targetJob = myJobs.find(j => j.id === jobId);
+              if (targetJob) {
+                setActiveViewTab('vacancies');
+                handleViewApplicants(targetJob);
+              }
+            }}
+          />
         </div>
       )}
 
