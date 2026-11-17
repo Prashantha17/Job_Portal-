@@ -224,7 +224,7 @@ export const CandidateProfileModal: React.FC<CandidateProfileModalProps> = ({
               {profile.resumes && profile.resumes.length > 0 && profile.resumes[0].filePath && (
                 <button
                   type="button"
-                  onClick={() => downloadResumeFile(profile.resumes[0].filePath, profile.resumes[0].fileName || 'Candidate_Resume.pdf')}
+                  onClick={() => downloadResumeFile(profile.resumes[0].filePath, profile.resumes[0].fileName || 'Candidate_Resume.pdf', profile.resumes[0].id)}
                   className="px-3 py-1.5 rounded-xl text-xs font-bold text-brand-700 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 border border-brand-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 >
                   <Download className="w-3.5 h-3.5 text-brand-600" />

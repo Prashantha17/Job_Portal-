@@ -228,13 +228,17 @@ export const profileService = {
 /**
  * Downloads a resume document from backend/MongoDB, ensuring authentication headers are included.
  */
-export const downloadResumeFile = async (filePathOrUrl: string, fileName: string = 'Resume.pdf') => {
-  if (!filePathOrUrl) {
+export const downloadResumeFile = async (filePathOrUrl: string, fileName: string = 'Resume.pdf', resumeId?: number) => {
+  if (!filePathOrUrl && !resumeId) {
     alert('Resume document is not attached to this candidate profile.');
     return;
   }
 
-  let targetUrl = filePathOrUrl;
+  let targetUrl = filePathOrUrl || '';
+  if (resumeId && (!targetUrl || targetUrl.includes('/uploads/resumes/'))) {
+    targetUrl = `/api/v1/candidates/resumes/by-id/${resumeId}/download`;
+  }
+
   if (!targetUrl.startsWith('http')) {
     const base = import.meta.env.VITE_API_URL || 'http://localhost:8080';
     targetUrl = `${base}${targetUrl.startsWith('/') ? '' : '/'}${targetUrl}`;
@@ -244,8 +248,13 @@ export const downloadResumeFile = async (filePathOrUrl: string, fileName: string
   const directUrlWithToken = token ? `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}token=${token}` : targetUrl;
 
   try {
-    const response = await api.get(targetUrl, { responseType: 'blob' });
-    const contentType = response.headers['content-type'] || 'application/pdf';
+    const response = await api.get(targetUrl, {
+      responseType: 'blob',
+      headers: {
+        'Accept': 'application/pdf, application/octet-stream, */*'
+      }
+    });
+    const contentType = (response.headers['content-type'] as string) || 'application/pdf';
     const blob = new Blob([response.data], { type: contentType });
     const blobUrl = window.URL.createObjectURL(blob);
 

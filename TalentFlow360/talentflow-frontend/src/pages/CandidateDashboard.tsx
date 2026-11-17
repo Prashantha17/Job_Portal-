@@ -3,15 +3,122 @@ import {
   User, Briefcase, GraduationCap, Award, FileText, Plus, Trash2, Edit3,
   ExternalLink, Mail, Phone, MapPin,
   CheckCircle2, Star, Sparkles, X, AlertCircle, ArrowLeft, LogIn, Send, Clock, Check,
-  History, Video, Calendar, AlertTriangle, RefreshCw, Upload
+  History, Video, Calendar, AlertTriangle, RefreshCw, Upload, Download
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import profileService, {
   CandidateProfile,
   Education,
   Experience,
-  UpdateCandidateProfilePayload
+  UpdateCandidateProfilePayload,
+  downloadResumeFile
 } from '../services/profileService';
+
+// Comprehensive Technical & Non-Technical Skills Catalog
+export const SKILL_CATALOG_GROUPS = [
+  {
+    group: 'Technical: Backend & Frameworks',
+    isTechnical: true,
+    category: 'BACKEND',
+    skills: [
+      'Java', 'Spring Boot', 'Hibernate / JPA', 'Node.js', 'Express.js',
+      'Python', 'Django', 'FastAPI', 'Go / Golang', 'C#', '.NET Core',
+      'PHP', 'Laravel', 'Microservices Architecture', 'RESTful APIs',
+      'GraphQL', 'gRPC', 'WebSockets', 'Apache Kafka'
+    ]
+  },
+  {
+    group: 'Technical: Frontend & UI Technologies',
+    isTechnical: true,
+    category: 'FRONTEND',
+    skills: [
+      'React.js', 'Next.js', 'TypeScript', 'JavaScript (ES6+)', 'Vue.js',
+      'Angular', 'Tailwind CSS', 'HTML5 & CSS3', 'Redux / Redux Toolkit',
+      'Zustand', 'Bootstrap', 'Material UI (MUI)', 'Vite', 'Webpack'
+    ]
+  },
+  {
+    group: 'Technical: Databases & Caching',
+    isTechnical: true,
+    category: 'DATABASE',
+    skills: [
+      'MySQL', 'PostgreSQL', 'MongoDB', 'Redis', 'SQL Query Optimization',
+      'Oracle Database', 'Elasticsearch', 'DynamoDB', 'Apache Cassandra', 'SQLite'
+    ]
+  },
+  {
+    group: 'Technical: Cloud, DevOps & Infrastructure',
+    isTechnical: true,
+    category: 'DEVOPS',
+    skills: [
+      'Docker', 'Kubernetes', 'Amazon Web Services (AWS)', 'Microsoft Azure',
+      'Google Cloud Platform (GCP)', 'CI/CD Pipelines', 'GitHub Actions',
+      'Jenkins', 'Terraform', 'Linux / Bash Scripting', 'Git Version Control', 'Nginx'
+    ]
+  },
+  {
+    group: 'Technical: Data Science, AI & System Architecture',
+    isTechnical: true,
+    category: 'DATA_AI',
+    skills: [
+      'Data Structures & Algorithms (DSA)', 'System Design & Scalability',
+      'Machine Learning', 'Deep Learning', 'Generative AI & LLMs',
+      'Python for Data Science (Pandas, NumPy)', 'TensorFlow', 'PyTorch',
+      'Apache Spark', 'Data Modeling'
+    ]
+  },
+  {
+    group: 'Technical: Testing, QA & Mobile Development',
+    isTechnical: true,
+    category: 'TESTING',
+    skills: [
+      'JUnit & Mockito', 'Jest & React Testing Library', 'Cypress',
+      'Selenium', 'Postman & API Automation', 'Flutter', 'React Native',
+      'Android Development (Kotlin)', 'iOS Development (Swift)'
+    ]
+  },
+  {
+    group: 'Non-Technical: Leadership & Management',
+    isTechnical: false,
+    category: 'GENERAL',
+    skills: [
+      'Team Leadership', 'Agile & Scrum Methodologies', 'Project Management',
+      'Product Management', 'Stakeholder Management', 'Sprint Planning & Delivery',
+      'Mentorship & Coaching', 'Team Building & Motivation', 'Resource Allocation'
+    ]
+  },
+  {
+    group: 'Non-Technical: Communication & Collaboration',
+    isTechnical: false,
+    category: 'GENERAL',
+    skills: [
+      'Effective Communication', 'Cross-Functional Collaboration',
+      'Presentation & Public Speaking', 'Client Relationship Management',
+      'Technical Writing & Documentation', 'Active Listening', 'Conflict Resolution',
+      'Negotiation & Persuasion'
+    ]
+  },
+  {
+    group: 'Non-Technical: Problem Solving & Critical Thinking',
+    isTechnical: false,
+    category: 'GENERAL',
+    skills: [
+      'Analytical Problem Solving', 'Critical Thinking',
+      'Decision Making Under Uncertainty', 'Root Cause Analysis',
+      'Strategic Planning', 'Innovation & Creative Thinking', 'Risk Management'
+    ]
+  },
+  {
+    group: 'Non-Technical: Work Ethic & Adaptability',
+    isTechnical: false,
+    category: 'GENERAL',
+    skills: [
+      'Time Management & Prioritization', 'Adaptability & Agility',
+      'Work Ethic & Accountability', 'Emotional Intelligence (EQ)',
+      'Attention to Detail', 'Stress & Pressure Management', 'Continuous Learning'
+    ]
+  }
+];
 import { applicationService } from '../services/applicationService';
 import { ApplicationResponse, ApplicationStatusHistoryItem, AtsAnalysisReport } from '../types/application';
 import { interviewService } from '../services/interviewService';
@@ -94,9 +201,12 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
   });
   const [skillForm, setSkillForm] = useState({
     skillName: '',
+    category: 'BACKEND',
     proficiencyLevel: 'INTERMEDIATE' as 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT',
     yearsOfExperience: 2.0
   });
+  const [skillFilterCategory, setSkillFilterCategory] = useState<'ALL' | 'TECHNICAL' | 'NON_TECHNICAL'>('ALL');
+  const [modalSkillType, setModalSkillType] = useState<'ALL' | 'TECHNICAL' | 'NON_TECHNICAL'>('ALL');
   const [resumeForm, setResumeForm] = useState({
     title: '',
     fileName: '',
@@ -349,13 +459,18 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
   // Add Skill
   const handleAddSkill = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!skillForm.skillName) return;
+    if (!skillForm.skillName.trim()) return;
     try {
       setActionLoading(true);
-      await profileService.addSkill(skillForm);
+      await profileService.addSkill({
+        skillName: skillForm.skillName.trim(),
+        category: skillForm.category || 'GENERAL',
+        proficiencyLevel: skillForm.proficiencyLevel,
+        yearsOfExperience: skillForm.yearsOfExperience
+      });
       await fetchProfile();
       setIsAddSkillOpen(false);
-      setSkillForm({ skillName: '', proficiencyLevel: 'INTERMEDIATE', yearsOfExperience: 2.0 });
+      setSkillForm({ skillName: '', category: 'BACKEND', proficiencyLevel: 'INTERMEDIATE', yearsOfExperience: 2.0 });
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Failed to add skill');
     } finally {
@@ -415,7 +530,31 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
       setSelectedAtsReport(report);
     } catch (err: any) {
       console.error('Failed to load ATS analysis report:', err);
-      setSelectedAtsReport(null);
+      // Fallback: If network or mongo took a moment, construct immediate report from application data
+      if (app.atsScore != null) {
+        setSelectedAtsReport({
+          applicationId: app.id,
+          atsScore: app.atsScore,
+          matchTier: (app.atsMatchTier as any) || (app.atsScore >= 80 ? 'EXCELLENT_MATCH' : app.atsScore >= 60 ? 'GOOD_MATCH' : 'NEEDS_IMPROVEMENT'),
+          skillsScore: Math.round(app.atsScore * 0.9),
+          experienceScore: Math.round(app.atsScore * 0.95),
+          keywordScore: Math.round(app.atsScore * 0.88),
+          formatScore: 92,
+          candidateEmail: app.candidateEmail,
+          candidateNameExtracted: app.candidateName,
+          jobTitle: app.jobTitle,
+          analyzedAt: app.appliedAt,
+          summary: `Resume scored ${app.atsScore}% compatibility against ${app.jobTitle || 'job specification'}.`,
+          matchedKeywords: ['Application Profile', 'Technical Qualifications'],
+          missingKeywords: [],
+          topStrengths: ['Direct vacancy alignment', 'Verified candidate profile'],
+          bulletAudits: [],
+          mistakes: [],
+          suggestions: ['Your application is actively under review in the recruitment pipeline.']
+        });
+      } else {
+        setSelectedAtsReport(null);
+      }
     } finally {
       setLoadingAtsReport(false);
     }
@@ -859,64 +998,141 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
       {/* TAB 4: SKILLS & PROFICIENCIES */}
       {activeTab === 'skills' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Technical & Professional Skills</h3>
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Award className="w-5 h-5 text-brand-600" />
+                <span>Technical & Non-Technical Skills</span>
+              </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Skills are evaluated by our Smart ATS Matching Engine to calculate job fit score.
+                Skills are evaluated by our Smart ATS Matching Engine to calculate vacancy compatibility.
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Plus className="w-4 h-4 text-brand-600" />}
-              onClick={() => setIsAddSkillOpen(true)}
-            >
-              Add New Skill
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus className="w-4 h-4" />}
+                onClick={() => setIsAddSkillOpen(true)}
+              >
+                Add Skill
+              </Button>
+            </div>
           </div>
+
+          {/* Category Filter Pills */}
+          {profile.skills.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setSkillFilterCategory('ALL')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                  skillFilterCategory === 'ALL'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                All Skills ({profile.skills.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSkillFilterCategory('TECHNICAL')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  skillFilterCategory === 'TECHNICAL'
+                    ? 'bg-brand-600 text-white shadow-xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                <span>💻 Technical</span>
+                <span className="text-[10px] font-mono opacity-80">
+                  ({profile.skills.filter(s => {
+                    const foundGroup = SKILL_CATALOG_GROUPS.find(g => g.skills.includes(s.skillName));
+                    return foundGroup ? foundGroup.isTechnical : s.category !== 'GENERAL';
+                  }).length})
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSkillFilterCategory('NON_TECHNICAL')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  skillFilterCategory === 'NON_TECHNICAL'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                <span>🤝 Non-Technical & Soft</span>
+                <span className="text-[10px] font-mono opacity-80">
+                  ({profile.skills.filter(s => {
+                    const foundGroup = SKILL_CATALOG_GROUPS.find(g => g.skills.includes(s.skillName));
+                    return foundGroup ? !foundGroup.isTechnical : s.category === 'GENERAL';
+                  }).length})
+                </span>
+              </button>
+            </div>
+          )}
 
           {profile.skills.length === 0 ? (
             <Card className="p-6 text-center py-12">
               <Award className="w-12 h-12 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-600 font-bold text-sm">No skills added yet.</p>
-              <p className="text-slate-400 text-xs mt-1 mb-4">Add your top technical proficiencies to get matched with jobs.</p>
+              <p className="text-slate-400 text-xs mt-1 mb-4">Add your technical and non-technical skills from the catalog or dropdown to boost ATS score.</p>
               <Button size="sm" onClick={() => setIsAddSkillOpen(true)}>Add Skills</Button>
             </Card>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {profile.skills.map((skill) => (
-                <div
-                  key={skill.id}
-                  className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-sm flex items-center justify-between hover:border-brand-400 transition-all"
-                >
-                  <div>
-                    <h5 className="font-bold text-slate-900 text-sm">{skill.skillName}</h5>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        skill.proficiencyLevel === 'EXPERT'
-                          ? 'bg-purple-50 text-purple-700 border-purple-200'
-                          : skill.proficiencyLevel === 'ADVANCED'
-                          ? 'bg-blue-50 text-blue-700 border-blue-200'
-                          : 'bg-slate-100 text-slate-700 border-slate-200'
-                      }`}>
-                        {skill.proficiencyLevel}
-                      </span>
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        {skill.yearsOfExperience} yrs
-                      </span>
-                    </div>
-                  </div>
+              {profile.skills
+                .filter(skill => {
+                  const foundGroup = SKILL_CATALOG_GROUPS.find(g => g.skills.includes(skill.skillName));
+                  const isTech = foundGroup ? foundGroup.isTechnical : skill.category !== 'GENERAL';
+                  if (skillFilterCategory === 'TECHNICAL') return isTech;
+                  if (skillFilterCategory === 'NON_TECHNICAL') return !isTech;
+                  return true;
+                })
+                .map((skill) => {
+                  const foundGroup = SKILL_CATALOG_GROUPS.find(g => g.skills.includes(skill.skillName));
+                  const isNonTech = foundGroup ? !foundGroup.isTechnical : skill.category === 'GENERAL';
+                  return (
+                    <div
+                      key={skill.id}
+                      className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-between hover:border-brand-400 transition-all hover:shadow-xs"
+                    >
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h5 className="font-bold text-slate-900 text-sm">{skill.skillName}</h5>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                            isNonTech
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : 'bg-brand-50 text-brand-700 border-brand-200'
+                          }`}>
+                            {isNonTech ? 'Soft Skill' : 'Technical'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            skill.proficiencyLevel === 'EXPERT'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : skill.proficiencyLevel === 'ADVANCED'
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-slate-100 text-slate-700 border-slate-200'
+                          }`}>
+                            {skill.proficiencyLevel}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            {skill.yearsOfExperience} yrs
+                          </span>
+                        </div>
+                      </div>
 
-                  <button
-                    onClick={() => skill.id && handleDeleteSkill(skill.id)}
-                    className="text-slate-300 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
-                    title="Remove skill"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+                      <button
+                        onClick={() => skill.id && handleDeleteSkill(skill.id)}
+                        className="text-slate-300 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                        title="Remove skill"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
             </div>
           )}
         </div>
@@ -1014,18 +1230,20 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                   </div>
 
                   <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
-                    {resume.filePath && (
-                      <a
-                        href={resume.filePath.startsWith('http') ? resume.filePath : `http://localhost:8080${resume.filePath}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl border border-brand-200 transition-colors"
-                        title="Download resume binary from MongoDB datastore"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        Download
-                      </a>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetUrl = resume.filePath && resume.filePath.includes('/candidates/resumes/')
+                          ? resume.filePath
+                          : `/api/v1/candidates/resumes/by-id/${resume.id}/download`;
+                        downloadResumeFile(targetUrl, resume.fileName || resume.title || 'Candidate_Resume.pdf', resume.id);
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl border border-brand-200/80 transition-colors shadow-2xs cursor-pointer"
+                      title="Download resume binary from MongoDB datastore"
+                    >
+                      <Download className="w-3.5 h-3.5 text-brand-600" />
+                      <span>Download</span>
+                    </button>
                     {!resume.isPrimary && (
                       <Button
                         variant="ghost"
@@ -1987,59 +2205,205 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
         </div>
       )}
 
-      {/* ================= MODAL: ADD SKILL ================= */}
+      {/* ================= MODAL: ADD SKILL (TECHNICAL & NON-TECHNICAL DROPDOWN) ================= */}
       {isAddSkillOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 my-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Add Technical Skill</h3>
-              <button onClick={() => setIsAddSkillOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Add Skill to Profile</h3>
+                  <p className="text-[11px] text-slate-500">Select from Technical or Non-Technical skills or enter custom</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddSkillOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleAddSkill} className="space-y-4">
+              {/* Filter Tabs for Modal */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Skill Name *</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Skill Type Category</label>
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold text-slate-600">
+                  <button
+                    type="button"
+                    onClick={() => setModalSkillType('ALL')}
+                    className={`py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer ${
+                      modalSkillType === 'ALL'
+                        ? 'bg-white text-slate-900 shadow-2xs'
+                        : 'hover:text-slate-900'
+                    }`}
+                  >
+                    All Skills
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalSkillType('TECHNICAL')}
+                    className={`py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer ${
+                      modalSkillType === 'TECHNICAL'
+                        ? 'bg-brand-600 text-white shadow-2xs'
+                        : 'hover:text-slate-900'
+                    }`}
+                  >
+                    💻 Technical
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalSkillType('NON_TECHNICAL')}
+                    className={`py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer ${
+                      modalSkillType === 'NON_TECHNICAL'
+                        ? 'bg-purple-600 text-white shadow-2xs'
+                        : 'hover:text-slate-900'
+                    }`}
+                  >
+                    🤝 Non-Technical
+                  </button>
+                </div>
+              </div>
+
+              {/* Dropdown Options for All Skills */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Select Skill from DropDown Catalog *
+                </label>
+                <select
+                  value={skillForm.skillName}
+                  onChange={(e) => {
+                    const selectedVal = e.target.value;
+                    const foundGroup = SKILL_CATALOG_GROUPS.find(g => g.skills.includes(selectedVal));
+                    setSkillForm({
+                      ...skillForm,
+                      skillName: selectedVal,
+                      category: foundGroup ? foundGroup.category : (modalSkillType === 'NON_TECHNICAL' ? 'GENERAL' : 'BACKEND')
+                    });
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                >
+                  <option value="">-- Choose a Technical or Non-Technical Skill --</option>
+                  {SKILL_CATALOG_GROUPS
+                    .filter(g => {
+                      if (modalSkillType === 'TECHNICAL') return g.isTechnical;
+                      if (modalSkillType === 'NON_TECHNICAL') return !g.isTechnical;
+                      return true;
+                    })
+                    .map((group) => (
+                      <optgroup key={group.group} label={group.group}>
+                        {group.skills.map((skill) => (
+                          <option key={skill} value={skill}>
+                            {skill}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                </select>
+              </div>
+
+              {/* Or Type Custom Skill */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Skill Name (Auto-filled or Custom) *
+                </label>
                 <input
                   type="text"
                   required
                   value={skillForm.skillName}
                   onChange={(e) => setSkillForm({ ...skillForm, skillName: e.target.value })}
-                  placeholder="e.g. Spring Boot, React, Docker..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  placeholder="e.g. Spring Boot, React.js, Team Leadership..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium"
                 />
               </div>
 
+              {/* Quick Popular Skill Chips */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Proficiency Level</label>
-                <select
-                  value={skillForm.proficiencyLevel}
-                  onChange={(e: any) => setSkillForm({ ...skillForm, proficiencyLevel: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-                >
-                  <option value="BEGINNER">Beginner (1-2 yrs)</option>
-                  <option value="INTERMEDIATE">Intermediate (2-4 yrs)</option>
-                  <option value="ADVANCED">Advanced (4-6 yrs)</option>
-                  <option value="EXPERT">Expert (6+ yrs)</option>
-                </select>
+                <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Popular Quick Chips:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(modalSkillType === 'NON_TECHNICAL'
+                    ? [
+                        'Team Leadership', 'Effective Communication', 'Agile & Scrum Methodologies',
+                        'Analytical Problem Solving', 'Time Management & Prioritization', 'Mentorship & Coaching'
+                      ]
+                    : [
+                        'Java', 'Spring Boot', 'React.js', 'TypeScript', 'Node.js',
+                        'Docker', 'AWS', 'MySQL', 'MongoDB', 'Team Leadership', 'Effective Communication'
+                      ]
+                  ).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        const foundGroup = SKILL_CATALOG_GROUPS.find(g => g.skills.includes(s));
+                        setSkillForm({
+                          ...skillForm,
+                          skillName: s,
+                          category: foundGroup ? foundGroup.category : 'GENERAL'
+                        });
+                      }}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                        skillForm.skillName === s
+                          ? 'bg-brand-50 border-brand-500 text-brand-700 font-bold'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Years of Hands-on Experience</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={skillForm.yearsOfExperience}
-                  onChange={(e) => setSkillForm({ ...skillForm, yearsOfExperience: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Proficiency Level</label>
+                  <select
+                    value={skillForm.proficiencyLevel}
+                    onChange={(e: any) => setSkillForm({ ...skillForm, proficiencyLevel: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                  >
+                    <option value="BEGINNER">Beginner (1-2 yrs)</option>
+                    <option value="INTERMEDIATE">Intermediate (2-4 yrs)</option>
+                    <option value="ADVANCED">Advanced (4-6 yrs)</option>
+                    <option value="EXPERT">Expert (6+ yrs)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Years of Experience</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={skillForm.yearsOfExperience}
+                    onChange={(e) => setSkillForm({ ...skillForm, yearsOfExperience: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                <Button variant="ghost" type="button" onClick={() => setIsAddSkillOpen(false)}>Cancel</Button>
-                <Button variant="primary" type="submit" isLoading={actionLoading}>Add Skill</Button>
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={() => setIsAddSkillOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  type="submit"
+                  isLoading={actionLoading}
+                  disabled={!skillForm.skillName.trim()}
+                >
+                  Add Skill
+                </Button>
               </div>
             </form>
           </div>

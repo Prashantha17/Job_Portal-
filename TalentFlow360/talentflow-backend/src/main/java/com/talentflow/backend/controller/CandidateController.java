@@ -180,7 +180,7 @@ public class CandidateController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    @GetMapping("/resumes/{mongoId}/download")
+    @GetMapping(value = "/resumes/{mongoId}/download", produces = { "application/pdf", "application/octet-stream", "*/*" })
     @Operation(summary = "Download candidate resume directly from MongoDB document storage")
     public ResponseEntity<byte[]> downloadResumeFromMongo(@PathVariable String mongoId) {
         java.util.Optional<com.talentflow.backend.document.ResumeDocument> docOpt = profileService.getResumeDocument(mongoId);
@@ -203,7 +203,7 @@ public class CandidateController {
                 .body(data);
     }
 
-    @GetMapping("/resumes/by-id/{resumeId}/download")
+    @GetMapping(value = "/resumes/by-id/{resumeId}/download", produces = { "application/pdf", "application/octet-stream", "*/*" })
     @Operation(summary = "Download candidate resume by SQL ID from MongoDB document storage")
     public ResponseEntity<byte[]> downloadResumeBySqlId(@PathVariable Long resumeId) {
         com.talentflow.backend.document.ResumeDocument doc = profileService.getResumeDocumentBySqlId(resumeId)

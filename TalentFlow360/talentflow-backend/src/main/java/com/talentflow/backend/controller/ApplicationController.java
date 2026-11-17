@@ -114,11 +114,30 @@ public class ApplicationController {
             Authentication authentication) {
         com.talentflow.backend.document.AtsAnalysisDocument doc = atsResumeAnalyzerService.getAnalysisByApplicationId(id)
                 .orElseGet(() -> {
-                    // On-demand generation and persistence for legacy or existing applications
                     com.talentflow.backend.entity.Application app = applicationRepository.findById(id)
                             .orElseThrow(() -> new com.talentflow.backend.exception.ResourceNotFoundException("Application", "id", id));
+
+                    // 1. Look for existing MongoDB ATS document created for this candidate & job (e.g. if saved with null applicationId)
+                    if (app.getCandidateEmail() != null && app.getJob() != null) {
+                        java.util.List<com.talentflow.backend.document.AtsAnalysisDocument> existingList =
+                                atsResumeAnalyzerService.getAnalysisByCandidateEmail(app.getCandidateEmail());
+                        for (com.talentflow.backend.document.AtsAnalysisDocument existing : existingList) {
+                            if (existing.getJobId() != null && existing.getJobId().equals(app.getJob().getId())) {
+                                existing.setApplicationId(id);
+                                com.talentflow.backend.document.AtsAnalysisDocument linked = atsResumeAnalyzerService.saveAnalysis(existing);
+                                if (app.getAtsScore() == null) {
+                                    app.setAtsScore(linked.getAtsScore());
+                                    app.setAtsMatchTier(linked.getMatchTier());
+                                    applicationRepository.save(app);
+                                }
+                                return linked;
+                            }
+                        }
+                    }
+
+                    // 2. On-demand evaluation & persistence in MongoDB for legacy or existing applications
                     com.talentflow.backend.document.AtsAnalysisDocument generated = atsResumeAnalyzerService.analyzeAndSave(app, app.getJob(), app.getResume());
-                    if (app.getAtsScore() == null) {
+                    if (generated != null && app.getAtsScore() == null) {
                         app.setAtsScore(generated.getAtsScore());
                         app.setAtsMatchTier(generated.getMatchTier());
                         applicationRepository.save(app);

@@ -59,13 +59,9 @@ export const CandidateProfileFullView: React.FC<CandidateProfileFullViewProps> =
   };
 
   const hikePercent = calculateHike(profile.currentSalary, profile.expectedSalary);
-
-  const getDownloadUrl = (filePath: string) => {
-    if (!filePath) return '#';
-    if (filePath.startsWith('http')) return filePath;
-    const base = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-    return `${base}${filePath.startsWith('/') ? '' : '/'}${filePath}`;
-  };
+  const primaryResume = profile.resumes && profile.resumes.length > 0
+    ? (profile.resumes.find(r => r.isPrimary) || profile.resumes[0])
+    : null;
 
   return (
     <div className="space-y-6">
@@ -178,6 +174,17 @@ export const CandidateProfileFullView: React.FC<CandidateProfileFullViewProps> =
                 )}
               </div>
 
+              {primaryResume && (
+                <button
+                  type="button"
+                  onClick={() => downloadResumeFile(primaryResume.filePath, primaryResume.fileName || primaryResume.title || 'Candidate_Resume.pdf', primaryResume.id)}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-brand-500 hover:bg-brand-400 text-white shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Download candidate's verified resume PDF"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download CV</span>
+                </button>
+              )}
               {isOwner && onEditProfile && (
                 <button
                   onClick={onEditProfile}
@@ -572,7 +579,7 @@ export const CandidateProfileFullView: React.FC<CandidateProfileFullViewProps> =
                 {res.filePath && (
                   <button
                     type="button"
-                    onClick={() => downloadResumeFile(res.filePath, res.fileName || res.title || 'Resume.pdf')}
+                    onClick={() => downloadResumeFile(res.filePath, res.fileName || res.title || 'Resume.pdf', res.id)}
                     className="px-3.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />

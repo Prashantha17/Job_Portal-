@@ -114,20 +114,22 @@ public class ApplicationService {
         }
         application.setExpectedCtcLpa(expectedCtc);
 
-        // 6. AI ATS Resume Analysis & Scoring (stored in MongoDB)
+        // 6. Save Application first to obtain generated ID for foreign/document linking
+        Application savedApp = applicationRepository.save(application);
+
+        // 7. AI ATS Resume Analysis & Scoring (stored in MongoDB with persistent applicationId)
         try {
-            com.talentflow.backend.document.AtsAnalysisDocument atsDoc = atsResumeAnalyzerService.analyzeAndSave(application, job, resume);
+            com.talentflow.backend.document.AtsAnalysisDocument atsDoc = atsResumeAnalyzerService.analyzeAndSave(savedApp, job, resume);
             if (atsDoc != null) {
-                application.setAtsScore(atsDoc.getAtsScore());
-                application.setAtsMatchTier(atsDoc.getMatchTier());
+                savedApp.setAtsScore(atsDoc.getAtsScore());
+                savedApp.setAtsMatchTier(atsDoc.getMatchTier());
+                savedApp = applicationRepository.save(savedApp);
             }
         } catch (Exception ex) {
             log.warn("AI ATS Resume analysis failed during application submit: {}", ex.getMessage());
         }
 
-        Application savedApp = applicationRepository.save(application);
-
-        // 6. Increment Job applications count
+        // 8. Increment Job applications count
         job.setApplicationsCount(job.getApplicationsCount() + 1);
         jobRepository.save(job);
 

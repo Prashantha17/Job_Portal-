@@ -656,7 +656,17 @@ public class AtsResumeAnalyzerService {
     }
 
     public Optional<AtsAnalysisDocument> getAnalysisByApplicationId(Long applicationId) {
+        if (applicationId == null) return Optional.empty();
         return atsAnalysisRepository.findByApplicationId(applicationId);
+    }
+
+    public List<AtsAnalysisDocument> getAnalysisByCandidateEmail(String candidateEmail) {
+        if (candidateEmail == null || candidateEmail.isBlank()) return Collections.emptyList();
+        return atsAnalysisRepository.findByCandidateEmail(candidateEmail);
+    }
+
+    public AtsAnalysisDocument saveAnalysis(AtsAnalysisDocument doc) {
+        return atsAnalysisRepository.save(doc);
     }
 
     // ==========================================

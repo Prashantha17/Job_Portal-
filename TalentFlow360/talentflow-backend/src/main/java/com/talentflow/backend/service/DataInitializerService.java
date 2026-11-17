@@ -171,6 +171,7 @@ public class DataInitializerService implements CommandLineRunner {
     }
 
     private void initSkills() {
+        // Technical Skills
         createSkillIfNotFound("Java", SkillCategory.BACKEND);
         createSkillIfNotFound("Python", SkillCategory.BACKEND);
         createSkillIfNotFound("TypeScript", SkillCategory.FRONTEND);
@@ -179,17 +180,35 @@ public class DataInitializerService implements CommandLineRunner {
         createSkillIfNotFound("Spring Boot", SkillCategory.BACKEND);
         createSkillIfNotFound("Hibernate", SkillCategory.BACKEND);
         createSkillIfNotFound("React.js", SkillCategory.FRONTEND);
+        createSkillIfNotFound("Next.js", SkillCategory.FRONTEND);
         createSkillIfNotFound("Node.js", SkillCategory.BACKEND);
+        createSkillIfNotFound("Express.js", SkillCategory.BACKEND);
         createSkillIfNotFound("MySQL", SkillCategory.DATABASE);
         createSkillIfNotFound("PostgreSQL", SkillCategory.DATABASE);
         createSkillIfNotFound("MongoDB", SkillCategory.DATABASE);
+        createSkillIfNotFound("Redis", SkillCategory.DATABASE);
         createSkillIfNotFound("Docker", SkillCategory.DEVOPS);
         createSkillIfNotFound("Kubernetes", SkillCategory.DEVOPS);
         createSkillIfNotFound("AWS", SkillCategory.DEVOPS);
         createSkillIfNotFound("REST API", SkillCategory.BACKEND);
         createSkillIfNotFound("Microservices", SkillCategory.BACKEND);
         createSkillIfNotFound("Tailwind CSS", SkillCategory.FRONTEND);
-        createSkillIfNotFound("Agile / Scrum", SkillCategory.GENERAL);
+        createSkillIfNotFound("Data Structures & Algorithms", SkillCategory.DATA_AI);
+        createSkillIfNotFound("System Design", SkillCategory.DATA_AI);
+
+        // Non-Technical / Soft Skills
+        createSkillIfNotFound("Agile & Scrum", SkillCategory.GENERAL);
+        createSkillIfNotFound("Team Leadership", SkillCategory.GENERAL);
+        createSkillIfNotFound("Effective Communication", SkillCategory.GENERAL);
+        createSkillIfNotFound("Analytical Problem Solving", SkillCategory.GENERAL);
+        createSkillIfNotFound("Project Management", SkillCategory.GENERAL);
+        createSkillIfNotFound("Time Management", SkillCategory.GENERAL);
+        createSkillIfNotFound("Cross-Functional Collaboration", SkillCategory.GENERAL);
+        createSkillIfNotFound("Stakeholder Management", SkillCategory.GENERAL);
+        createSkillIfNotFound("Critical Thinking", SkillCategory.GENERAL);
+        createSkillIfNotFound("Mentorship & Coaching", SkillCategory.GENERAL);
+        createSkillIfNotFound("Adaptability & Fast Learner", SkillCategory.GENERAL);
+        createSkillIfNotFound("Work Ethic & Accountability", SkillCategory.GENERAL);
     }
 
     private void createSkillIfNotFound(String name, SkillCategory category) {
