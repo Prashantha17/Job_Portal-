@@ -4,6 +4,8 @@ import com.talentflow.backend.dto.profile.*;
 import com.talentflow.backend.entity.*;
 import com.talentflow.backend.mapper.ProfileMapper;
 import com.talentflow.backend.repository.*;
+import com.talentflow.backend.service.AtsResumeAnalyzerService;
+import com.talentflow.backend.service.ProfileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,6 +47,15 @@ class ProfileServiceTest {
 
     @Mock
     private SkillService skillService;
+
+    @Mock
+    private com.talentflow.backend.mongorepository.ResumeDocumentRepository resumeDocumentRepository;
+
+    @Mock
+    private AtsResumeAnalyzerService atsResumeAnalyzerService;
+
+    @Mock
+    private ApplicationRepository applicationRepository;
 
     @Spy
     private ProfileMapper profileMapper = new ProfileMapper();
@@ -177,6 +188,62 @@ class ProfileServiceTest {
         assertEquals("Sarah Jenkins", response.getFullName());
         assertEquals("Apex Tech", response.getCompanyName());
         assertEquals("Talent Lead", response.getDesignation());
+    }
+
+    @Test
+    @DisplayName("deleteResume safely unlinks applications and deletes resume without foreign key conflicts")
+    void testDeleteResume_UnlinksApplicationsAndDeletesResume() {
+        when(userRepository.findByEmail("candidate@talentflow360.com"))
+                .thenReturn(Optional.of(candidateUser));
+        when(candidateProfileRepository.findByUser(candidateUser))
+                .thenReturn(Optional.of(candidateProfile));
+
+        Resume resume = new Resume(candidateProfile, "Default Resume", "resume.pdf", "/api/v1/candidates/resumes/mongo123/download", 1024L, "application/pdf", false);
+        resume.setId(100L);
+        candidateProfile.getResumes().add(resume);
+
+        when(resumeRepository.findById(100L)).thenReturn(Optional.of(resume));
+
+        Application linkedApp = new Application();
+        linkedApp.setId(50L);
+        linkedApp.setResume(resume);
+
+        when(applicationRepository.findByResumeId(100L)).thenReturn(java.util.List.of(linkedApp));
+
+        profileService.deleteResume("candidate@talentflow360.com", 100L);
+
+        assertNull(linkedApp.getResume(), "Linked application resume reference must be unlinked (null) before deletion");
+        verify(applicationRepository, times(1)).save(linkedApp);
+        verify(resumeDocumentRepository, times(1)).deleteById("mongo123");
+        verify(resumeRepository, times(1)).delete(resume);
+    }
+
+    @Test
+    @DisplayName("deleteResume auto-promotes next resume when primary resume is deleted")
+    void testDeleteResume_AutoPromotesNextResume() {
+        when(userRepository.findByEmail("candidate@talentflow360.com"))
+                .thenReturn(Optional.of(candidateUser));
+        when(candidateProfileRepository.findByUser(candidateUser))
+                .thenReturn(Optional.of(candidateProfile));
+
+        Resume primaryResume = new Resume(candidateProfile, "Primary Resume", "primary.pdf", "/api/v1/candidates/resumes/doc1/download", 1024L, "application/pdf", true);
+        primaryResume.setId(101L);
+
+        Resume backupResume = new Resume(candidateProfile, "Secondary Resume", "secondary.pdf", "/api/v1/candidates/resumes/doc2/download", 1024L, "application/pdf", false);
+        backupResume.setId(102L);
+
+        candidateProfile.getResumes().add(primaryResume);
+        candidateProfile.getResumes().add(backupResume);
+
+        when(resumeRepository.findById(101L)).thenReturn(Optional.of(primaryResume));
+        when(applicationRepository.findByResumeId(101L)).thenReturn(java.util.Collections.emptyList());
+        when(resumeRepository.findByCandidateProfile(candidateProfile)).thenReturn(java.util.List.of(primaryResume, backupResume));
+
+        profileService.deleteResume("candidate@talentflow360.com", 101L);
+
+        assertTrue(backupResume.isPrimary(), "Secondary resume must be auto-promoted to primary");
+        verify(resumeRepository, times(1)).save(backupResume);
+        verify(resumeRepository, times(1)).delete(primaryResume);
     }
 }
 

@@ -67,6 +67,23 @@ public class CandidateController {
         return ResponseEntity.ok(updated);
     }
 
+    @PostMapping("/me/generate-summary")
+    @PreAuthorize("hasAnyRole('JOB_SEEKER', 'SUPER_ADMIN')")
+    @Operation(summary = "AI-generate an ATS-optimized professional summary using candidate skills, experiences, educations, and resume")
+    public ResponseEntity<GenerateSummaryResponse> generateAiSummary(
+            @RequestBody(required = false) GenerateSummaryRequest request,
+            @RequestParam(value = "tone", required = false) String toneParam,
+            Authentication authentication) {
+        if (request == null) {
+            request = new GenerateSummaryRequest();
+        }
+        if (toneParam != null && !toneParam.isBlank() && (request.getTone() == null || request.getTone().isBlank())) {
+            request.setTone(toneParam);
+        }
+        GenerateSummaryResponse response = profileService.generateAiProfessionalSummary(getAuthenticatedEmail(authentication), request);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/me/education")
     @PreAuthorize("hasAnyRole('JOB_SEEKER', 'SUPER_ADMIN')")
     @Operation(summary = "Add education entry to candidate profile")

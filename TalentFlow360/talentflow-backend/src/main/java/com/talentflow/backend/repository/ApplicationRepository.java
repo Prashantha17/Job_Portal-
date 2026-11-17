@@ -18,6 +18,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     List<Application> findByJobIdOrderByAppliedAtDesc(Long jobId);
     boolean existsByJobIdAndCandidateProfileUserEmail(Long jobId, String email);
     Optional<Application> findByJobIdAndCandidateProfileUserEmail(Long jobId, String email);
+    List<Application> findByResumeId(Long resumeId);
 
     @Query("SELECT a FROM Application a WHERE a.job.postedBy.id = :recruiterId ORDER BY a.appliedAt DESC")
     List<Application> findByRecruiterId(@Param("recruiterId") Long recruiterId);

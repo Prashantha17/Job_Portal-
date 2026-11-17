@@ -5,6 +5,7 @@ import com.talentflow.backend.entity.*;
 import com.talentflow.backend.exception.ResourceNotFoundException;
 import com.talentflow.backend.mapper.ProfileMapper;
 import com.talentflow.backend.repository.*;
+import com.talentflow.backend.service.AtsResumeAnalyzerService;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -12,12 +13,18 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class ProfileService {
@@ -35,6 +42,22 @@ public class ProfileService {
     private final ProfileMapper profileMapper;
     private final com.talentflow.backend.mongorepository.ResumeDocumentRepository resumeDocumentRepository;
     private final AtsResumeAnalyzerService atsResumeAnalyzerService;
+    private final ApplicationRepository applicationRepository;
+
+    public ProfileService(UserRepository userRepository,
+                          CandidateProfileRepository candidateProfileRepository,
+                          RecruiterProfileRepository recruiterProfileRepository,
+                          EducationRepository educationRepository,
+                          ExperienceRepository experienceRepository,
+                          CandidateSkillRepository candidateSkillRepository,
+                          ResumeRepository resumeRepository,
+                          SkillService skillService,
+                          ProfileMapper profileMapper,
+                          com.talentflow.backend.mongorepository.ResumeDocumentRepository resumeDocumentRepository) {
+        this(userRepository, candidateProfileRepository, recruiterProfileRepository, educationRepository,
+             experienceRepository, candidateSkillRepository, resumeRepository, skillService, profileMapper,
+             resumeDocumentRepository, null, null);
+    }
 
     public ProfileService(UserRepository userRepository,
                           CandidateProfileRepository candidateProfileRepository,
@@ -46,7 +69,25 @@ public class ProfileService {
                           SkillService skillService,
                           ProfileMapper profileMapper,
                           com.talentflow.backend.mongorepository.ResumeDocumentRepository resumeDocumentRepository,
-                          AtsResumeAnalyzerService atsResumeAnalyzerService) {
+                          @Lazy AtsResumeAnalyzerService atsResumeAnalyzerService) {
+        this(userRepository, candidateProfileRepository, recruiterProfileRepository, educationRepository,
+             experienceRepository, candidateSkillRepository, resumeRepository, skillService, profileMapper,
+             resumeDocumentRepository, atsResumeAnalyzerService, null);
+    }
+
+    @Autowired
+    public ProfileService(UserRepository userRepository,
+                          CandidateProfileRepository candidateProfileRepository,
+                          RecruiterProfileRepository recruiterProfileRepository,
+                          EducationRepository educationRepository,
+                          ExperienceRepository experienceRepository,
+                          CandidateSkillRepository candidateSkillRepository,
+                          ResumeRepository resumeRepository,
+                          SkillService skillService,
+                          ProfileMapper profileMapper,
+                          com.talentflow.backend.mongorepository.ResumeDocumentRepository resumeDocumentRepository,
+                          @Lazy AtsResumeAnalyzerService atsResumeAnalyzerService,
+                          @Lazy ApplicationRepository applicationRepository) {
         this.userRepository = userRepository;
         this.candidateProfileRepository = candidateProfileRepository;
         this.recruiterProfileRepository = recruiterProfileRepository;
@@ -58,6 +99,7 @@ public class ProfileService {
         this.profileMapper = profileMapper;
         this.resumeDocumentRepository = resumeDocumentRepository;
         this.atsResumeAnalyzerService = atsResumeAnalyzerService;
+        this.applicationRepository = applicationRepository;
     }
 
     // ==========================================
@@ -259,7 +301,9 @@ public class ProfileService {
         String effectiveTitle = (title != null && !title.isBlank()) ? title.trim() : originalFilename;
 
         // 1. Extract text for AI ATS Scanning
-        String parsedText = atsResumeAnalyzerService.extractText(bytes, contentType, originalFilename);
+        String parsedText = (atsResumeAnalyzerService != null)
+                ? atsResumeAnalyzerService.extractText(bytes, contentType, originalFilename)
+                : "";
 
         // 2. Reset existing primary resumes in MongoDB & MySQL if this is primary
         if (isPrimary) {
@@ -366,7 +410,9 @@ public class ProfileService {
                 try {
                     CandidateProfile cand = sqlRes.getCandidateProfile();
                     byte[] generatedPdf = generateCandidateResumePdf(cand, sqlRes.getTitle());
-                    String parsedText = atsResumeAnalyzerService.extractText(generatedPdf, "application/pdf", sqlRes.getFileName());
+                    String parsedText = (atsResumeAnalyzerService != null)
+                            ? atsResumeAnalyzerService.extractText(generatedPdf, "application/pdf", sqlRes.getFileName())
+                            : "";
                     com.talentflow.backend.document.ResumeDocument newDoc = new com.talentflow.backend.document.ResumeDocument(
                             cand.getId(),
                             cand.getUser() != null ? cand.getUser().getEmail() : "candidate@talentflow360.com",
@@ -387,6 +433,54 @@ public class ProfileService {
                 }
             }
             return java.util.Optional.empty();
+        });
+    }
+
+    public java.util.Optional<com.talentflow.backend.document.ResumeDocument> getCandidatePrimaryResumeDocument(Long candidateProfileId) {
+        if (candidateProfileId == null) return java.util.Optional.empty();
+        if (resumeDocumentRepository != null) {
+            java.util.Optional<com.talentflow.backend.document.ResumeDocument> primary =
+                    resumeDocumentRepository.findByCandidateProfileIdAndIsPrimaryTrue(candidateProfileId);
+            if (primary.isPresent() && primary.get().getFileData() != null && primary.get().getFileData().length > 0) {
+                return primary;
+            }
+            List<com.talentflow.backend.document.ResumeDocument> list =
+                    resumeDocumentRepository.findByCandidateProfileId(candidateProfileId);
+            for (com.talentflow.backend.document.ResumeDocument d : list) {
+                if (d.getFileData() != null && d.getFileData().length > 0) {
+                    return java.util.Optional.of(d);
+                }
+            }
+        }
+        // Fallback: check MySQL resumes
+        return candidateProfileRepository.findById(candidateProfileId).flatMap(cand -> {
+            List<Resume> resumes = resumeRepository.findByCandidateProfile(cand);
+            for (Resume r : resumes) {
+                if (r.isPrimary()) {
+                    return getResumeDocumentBySqlId(r.getId());
+                }
+            }
+            if (!resumes.isEmpty()) {
+                return getResumeDocumentBySqlId(resumes.get(0).getId());
+            }
+            try {
+                byte[] generatedPdf = generateCandidateResumePdf(cand, "Verified Profile Resume");
+                com.talentflow.backend.document.ResumeDocument fallbackDoc = new com.talentflow.backend.document.ResumeDocument(
+                        cand.getId(),
+                        cand.getUser() != null ? cand.getUser().getEmail() : "candidate@talentflow360.com",
+                        "Candidate Resume",
+                        "Resume.pdf",
+                        "application/pdf",
+                        (long) generatedPdf.length,
+                        generatedPdf,
+                        "",
+                        true
+                );
+                return java.util.Optional.of(fallbackDoc);
+            } catch (Exception e) {
+                log.error("Failed to generate fallback resume PDF for candidate {}: {}", candidateProfileId, e.getMessage());
+                return java.util.Optional.empty();
+            }
         });
     }
 
@@ -576,6 +670,58 @@ public class ProfileService {
         if (!resume.getCandidateProfile().getId().equals(profile.getId())) {
             throw new ResourceNotFoundException("Resume does not belong to candidate");
         }
+
+        // 1. Safely unlink any past job applications referencing this resume so foreign key constraints do not block deletion
+        if (applicationRepository != null) {
+            List<Application> linkedApps = applicationRepository.findByResumeId(resumeId);
+            for (Application app : linkedApps) {
+                app.setResume(null);
+                applicationRepository.save(app);
+            }
+        }
+
+        // 2. Remove from parent candidateProfile collection to keep Hibernate persistence context synchronized
+        if (profile.getResumes() != null) {
+            profile.getResumes().removeIf(r -> r.getId().equals(resumeId));
+        }
+
+        // 3. If deleting the primary resume, auto-promote another remaining resume if available
+        if (resume.isPrimary()) {
+            List<Resume> remainingResumes = resumeRepository.findByCandidateProfile(profile);
+            for (Resume r : remainingResumes) {
+                if (!r.getId().equals(resumeId)) {
+                    r.setPrimary(true);
+                    resumeRepository.save(r);
+
+                    if (resumeDocumentRepository != null && r.getFilePath() != null && r.getFilePath().contains("/resumes/")) {
+                        String[] parts = r.getFilePath().split("/resumes/");
+                        if (parts.length > 1) {
+                            String docId = parts[1].replace("/download", "").trim();
+                            resumeDocumentRepository.findById(docId).ifPresent(doc -> {
+                                doc.setPrimary(true);
+                                resumeDocumentRepository.save(doc);
+                            });
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        // 4. Delete the stored file from MongoDB
+        if (resumeDocumentRepository != null && resume.getFilePath() != null && resume.getFilePath().contains("/resumes/")) {
+            String[] parts = resume.getFilePath().split("/resumes/");
+            if (parts.length > 1) {
+                String docId = parts[1].replace("/download", "").trim();
+                try {
+                    resumeDocumentRepository.deleteById(docId);
+                } catch (Exception ex) {
+                    log.warn("Failed to delete MongoDB resume document {}: {}", docId, ex.getMessage());
+                }
+            }
+        }
+
+        // 5. Delete from MySQL database
         resumeRepository.delete(resume);
     }
 
@@ -599,6 +745,384 @@ public class ProfileService {
             throw new ResourceNotFoundException("Resume", "id", resumeId);
         }
         return profileMapper.toResumeDTO(target);
+    }
+
+    // ==========================================
+    // AI PROFESSIONAL SUMMARY GENERATION
+    // ==========================================
+
+    @Transactional(readOnly = true)
+    public GenerateSummaryResponse generateAiProfessionalSummary(String email, GenerateSummaryRequest request) {
+        CandidateProfile profile = getOrCreateCandidateProfileEntity(email);
+        User user = profile.getUser();
+        String tone = (request != null && request.getTone() != null && !request.getTone().isBlank())
+                ? request.getTone().trim().toUpperCase() : "BALANCED";
+        String customInstruction = (request != null) ? request.getCustomInstruction() : null;
+
+        // 1. Gather Candidate Profile Skills (Technical + Non-Technical)
+        List<CandidateSkill> candidateSkills = profile.getSkills() != null ? profile.getSkills() : Collections.emptyList();
+        Set<String> technicalSkills = new LinkedHashSet<>();
+        Set<String> softSkills = new LinkedHashSet<>();
+
+        for (CandidateSkill cs : candidateSkills) {
+            if (cs.getSkill() != null && cs.getSkill().getName() != null) {
+                String name = cs.getSkill().getName().trim();
+                if (cs.getSkill().getCategory() == SkillCategory.GENERAL || isSoftSkill(name)) {
+                    softSkills.add(name);
+                } else {
+                    technicalSkills.add(name);
+                }
+            }
+        }
+
+        // 2. Gather Experiences
+        List<Experience> experiences = profile.getExperiences() != null ? profile.getExperiences() : Collections.emptyList();
+        List<Experience> sortedExp = new ArrayList<>(experiences);
+        sortedExp.sort((a, b) -> {
+            if (a.isCurrent() && !b.isCurrent()) return -1;
+            if (!a.isCurrent() && b.isCurrent()) return 1;
+            if (a.getStartDate() != null && b.getStartDate() != null) {
+                return b.getStartDate().compareTo(a.getStartDate());
+            }
+            return 0;
+        });
+
+        // 3. Gather Educations
+        List<Education> educations = profile.getEducations() != null ? profile.getEducations() : Collections.emptyList();
+        List<Education> sortedEdu = new ArrayList<>(educations);
+        sortedEdu.sort((a, b) -> {
+            if (a.getEndDate() != null && b.getEndDate() != null) {
+                return b.getEndDate().compareTo(a.getEndDate());
+            }
+            return 0;
+        });
+
+        // 4. Look up Primary Resume Document in MongoDB
+        Optional<com.talentflow.backend.document.ResumeDocument> resumeDocOpt =
+                resumeDocumentRepository.findByCandidateProfileIdAndIsPrimaryTrue(profile.getId());
+        if (resumeDocOpt.isEmpty()) {
+            resumeDocOpt = resumeDocumentRepository.findByCandidateEmailAndIsPrimaryTrue(email);
+        }
+        if (resumeDocOpt.isEmpty()) {
+            List<com.talentflow.backend.document.ResumeDocument> docs = resumeDocumentRepository.findByCandidateProfileId(profile.getId());
+            if (!docs.isEmpty()) {
+                resumeDocOpt = Optional.of(docs.get(0));
+            }
+        }
+
+        String resumeText = "";
+        String resumeFileName = null;
+        boolean resumeFound = false;
+
+        if (resumeDocOpt.isPresent()) {
+            com.talentflow.backend.document.ResumeDocument doc = resumeDocOpt.get();
+            resumeFound = true;
+            resumeFileName = doc.getFileName();
+            if (doc.getParsedText() != null && !doc.getParsedText().isBlank()) {
+                resumeText = doc.getParsedText();
+            } else if (doc.getFileData() != null && doc.getFileData().length > 0 && atsResumeAnalyzerService != null) {
+                resumeText = atsResumeAnalyzerService.extractText(doc.getFileData(), doc.getContentType(), doc.getFileName());
+            }
+        }
+
+        // 5. Augment skills from parsed resume text if enabled
+        boolean includeResume = request == null || request.getIncludeResumeKeywords() == null || Boolean.TRUE.equals(request.getIncludeResumeKeywords());
+        if (includeResume && !resumeText.isBlank() && atsResumeAnalyzerService != null) {
+            Set<String> resumeSkills = atsResumeAnalyzerService.extractCatalogSkillsFromText(resumeText);
+            for (String s : resumeSkills) {
+                if (isSoftSkill(s)) {
+                    softSkills.add(s);
+                } else {
+                    technicalSkills.add(s);
+                }
+            }
+        }
+
+        // 6. Calculate total experience years
+        int totalYears = profile.getTotalExperienceYears() != null ? profile.getTotalExperienceYears().intValue() : 0;
+        if (totalYears == 0 && !sortedExp.isEmpty()) {
+            totalYears = calculateExperienceYears(sortedExp);
+        }
+        if (totalYears == 0 && !resumeText.isBlank() && atsResumeAnalyzerService != null) {
+            totalYears = atsResumeAnalyzerService.extractYearsFromResume(resumeText.toLowerCase());
+        }
+
+        // 7. Extract quantifiable achievements and metrics
+        List<String> detectedMetrics = extractQuantifiableMetrics(sortedExp, resumeText);
+
+        // 8. Determine target role/title
+        String roleTitle = determineRoleTitle(profile, sortedExp, resumeText);
+
+        // 9. Synthesize the tailored summary
+        String generatedSummary = synthesizeProfessionalSummary(
+                user,
+                roleTitle,
+                totalYears,
+                new ArrayList<>(technicalSkills),
+                new ArrayList<>(softSkills),
+                sortedExp,
+                sortedEdu,
+                detectedMetrics,
+                tone,
+                customInstruction,
+                resumeText
+        );
+
+        List<String> highlights = new ArrayList<>();
+        technicalSkills.stream().limit(7).forEach(highlights::add);
+        softSkills.stream().limit(3).forEach(highlights::add);
+
+        return new GenerateSummaryResponse(
+                generatedSummary,
+                tone,
+                technicalSkills.size() + softSkills.size(),
+                experiences.size(),
+                educations.size(),
+                resumeFound,
+                resumeFileName,
+                highlights,
+                detectedMetrics.stream().limit(4).toList()
+        );
+    }
+
+    private boolean isSoftSkill(String name) {
+        if (name == null) return false;
+        String lower = name.toLowerCase();
+        return lower.contains("lead") || lower.contains("communicat") || lower.contains("agile")
+                || lower.contains("scrum") || lower.contains("problem") || lower.contains("teamwork")
+                || lower.contains("collaborat") || lower.contains("mentor") || lower.contains("negotiat")
+                || lower.contains("adapt") || lower.contains("critical") || lower.contains("stakeholder")
+                || lower.contains("presentation") || lower.contains("management") || lower.contains("interpersonal")
+                || lower.contains("work ethic") || lower.contains("ownership") || lower.contains("conflict");
+    }
+
+    private String determineRoleTitle(CandidateProfile profile, List<Experience> sortedExp, String resumeText) {
+        if (profile.getHeadline() != null && !profile.getHeadline().isBlank()) {
+            return profile.getHeadline().split("[|/•,-]")[0].trim();
+        }
+        if (!sortedExp.isEmpty() && sortedExp.get(0).getJobTitle() != null && !sortedExp.get(0).getJobTitle().isBlank()) {
+            return sortedExp.get(0).getJobTitle().trim();
+        }
+        if (resumeText != null && !resumeText.isBlank()) {
+            String lower = resumeText.toLowerCase();
+            if (lower.contains("full stack") || lower.contains("fullstack")) return "Full Stack Software Engineer";
+            if (lower.contains("backend developer") || lower.contains("backend engineer")) return "Backend Software Engineer";
+            if (lower.contains("frontend developer") || lower.contains("frontend engineer")) return "Frontend Engineer";
+            if (lower.contains("devops")) return "DevOps & Cloud Engineer";
+            if (lower.contains("data engineer") || lower.contains("data scientist")) return "Data & ML Engineer";
+        }
+        return "Software Engineer";
+    }
+
+    private int calculateExperienceYears(List<Experience> sortedExp) {
+        int earliestYear = 9999;
+        int latestYear = 0;
+        int currentYear = LocalDate.now().getYear();
+        boolean hasExp = false;
+
+        Pattern yearPattern = Pattern.compile("\\b(19\\d{2}|20\\d{2})\\b");
+
+        for (Experience exp : sortedExp) {
+            if (exp.isCurrent()) {
+                latestYear = Math.max(latestYear, currentYear);
+                hasExp = true;
+            }
+            if (exp.getEndDate() != null) {
+                Matcher m = yearPattern.matcher(exp.getEndDate());
+                if (m.find()) {
+                    int y = Integer.parseInt(m.group(1));
+                    latestYear = Math.max(latestYear, y);
+                    hasExp = true;
+                }
+            }
+            if (exp.getStartDate() != null) {
+                Matcher m = yearPattern.matcher(exp.getStartDate());
+                if (m.find()) {
+                    int y = Integer.parseInt(m.group(1));
+                    earliestYear = Math.min(earliestYear, y);
+                    hasExp = true;
+                }
+            }
+        }
+
+        if (hasExp && earliestYear <= latestYear && earliestYear != 9999) {
+            return Math.max(1, (latestYear - earliestYear) + 1);
+        }
+        return sortedExp.size();
+    }
+
+    private List<String> extractQuantifiableMetrics(List<Experience> experiences, String resumeText) {
+        Set<String> metrics = new LinkedHashSet<>();
+        Pattern p = Pattern.compile("(\\b(?:increased|reduced|improved|boosted|accelerated|optimized|scaled|delivered)\\b[^.;,]{1,60}(?:\\d+%|\\$\\d+[kKmM]?|₹\\d+[kKmMlL]?|\\d+x|\\b\\d{2,}\\+?\\s*(?:users|clients|requests|endpoints|queries|ms|seconds|teams|engineers)))", Pattern.CASE_INSENSITIVE);
+
+        for (Experience exp : experiences) {
+            if (exp.getDescription() != null) {
+                Matcher m = p.matcher(exp.getDescription());
+                while (m.find() && metrics.size() < 6) {
+                    metrics.add(m.group(1).trim());
+                }
+            }
+        }
+
+        if (metrics.size() < 3 && resumeText != null && !resumeText.isBlank()) {
+            Matcher m = p.matcher(resumeText);
+            while (m.find() && metrics.size() < 6) {
+                metrics.add(m.group(1).trim());
+            }
+        }
+
+        return new ArrayList<>(metrics);
+    }
+
+    private String synthesizeProfessionalSummary(
+            User user,
+            String roleTitle,
+            int totalYears,
+            List<String> technicalSkills,
+            List<String> softSkills,
+            List<Experience> sortedExp,
+            List<Education> sortedEdu,
+            List<String> metrics,
+            String tone,
+            String customInstruction,
+            String resumeText) {
+
+        StringBuilder sb = new StringBuilder();
+
+        // 1. Identity & Tenure Opening
+        String expPhrase;
+        if (totalYears >= 7) {
+            expPhrase = "Senior " + roleTitle + " with " + totalYears + "+ years of seasoned industry experience";
+        } else if (totalYears >= 3) {
+            expPhrase = roleTitle + " with " + totalYears + "+ years of comprehensive experience";
+        } else if (totalYears >= 1) {
+            expPhrase = roleTitle + " with " + totalYears + "+ year(s) of practical industry experience";
+        } else {
+            expPhrase = "Motivated " + roleTitle + " with a strong technical foundation and hands-on project experience";
+        }
+
+        // Top technical skills snippet
+        String topTech;
+        if (!technicalSkills.isEmpty()) {
+            int take = Math.min(5, technicalSkills.size());
+            topTech = String.join(", ", technicalSkills.subList(0, take));
+        } else {
+            topTech = "modern software engineering, RESTful APIs, and database architecture";
+        }
+
+        // Top soft skills snippet
+        String topSoft;
+        if (!softSkills.isEmpty()) {
+            int take = Math.min(3, softSkills.size());
+            topSoft = String.join(", ", softSkills.subList(0, take));
+        } else {
+            topSoft = "agile collaboration, clean code practices, and proactive problem solving";
+        }
+
+        // Education snippet
+        String eduSnippet = "";
+        if (!sortedEdu.isEmpty()) {
+            Education topEdu = sortedEdu.get(0);
+            String deg = topEdu.getDegree() != null ? topEdu.getDegree() : "Degree";
+            String field = topEdu.getFieldOfStudy() != null && !topEdu.getFieldOfStudy().isBlank()
+                    ? " in " + topEdu.getFieldOfStudy() : "";
+            String inst = topEdu.getInstitution() != null && !topEdu.getInstitution().isBlank()
+                    ? " from " + topEdu.getInstitution() : "";
+            eduSnippet = deg + field + inst;
+        } else if (resumeText != null && !resumeText.isBlank() && atsResumeAnalyzerService != null) {
+            String degreeFromResume = atsResumeAnalyzerService.extractDegree(resumeText);
+            if (degreeFromResume != null && !degreeFromResume.startsWith("Not explicitly")) {
+                eduSnippet = degreeFromResume;
+            }
+        }
+
+        // Experience highlights
+        String companyHighlights = "";
+        if (!sortedExp.isEmpty()) {
+            List<String> companies = sortedExp.stream()
+                    .map(Experience::getCompanyName)
+                    .filter(c -> c != null && !c.isBlank())
+                    .distinct()
+                    .limit(2)
+                    .toList();
+            if (!companies.isEmpty()) {
+                companyHighlights = "at " + String.join(" and ", companies);
+            }
+        }
+
+        // Generate tailored summary based on selected tone
+        switch (tone) {
+            case "RESULTS_DRIVEN":
+                sb.append("Performance-driven ").append(expPhrase).append(", specializing in ").append(topTech).append(". ");
+                if (!companyHighlights.isEmpty()) {
+                    sb.append("Demonstrated success ").append(companyHighlights).append(" building resilient, high-throughput systems and driving measurable business results. ");
+                } else {
+                    sb.append("Demonstrated track record of architecting scalable applications and driving operational efficiencies. ");
+                }
+                if (!metrics.isEmpty()) {
+                    sb.append("Key achievements include ").append(metrics.get(0)).append(". ");
+                }
+                if (!eduSnippet.isEmpty()) {
+                    sb.append("Holds a ").append(eduSnippet).append(". ");
+                }
+                sb.append("Combines rigorous technical mastery with ").append(topSoft)
+                  .append(" to consistently deliver high-impact engineering solutions on schedule.");
+                break;
+
+            case "TECHNICAL":
+                sb.append("Architecturally disciplined ").append(expPhrase).append(", with deep hands-on expertise spanning ").append(topTech).append(". ");
+                if (!companyHighlights.isEmpty()) {
+                    sb.append("Experienced ").append(companyHighlights).append(" in engineering clean, maintainable microservices, robust API integrations, and scalable database architectures. ");
+                } else {
+                    sb.append("Experienced in engineering clean, maintainable microservices, distributed architectures, and automated CI/CD pipelines. ");
+                }
+                if (technicalSkills.size() > 5) {
+                    int end = Math.min(9, technicalSkills.size());
+                    sb.append("Proficient with advanced tooling including ")
+                      .append(String.join(", ", technicalSkills.subList(5, end))).append(". ");
+                }
+                if (!eduSnippet.isEmpty()) {
+                    sb.append("Academically grounded with a ").append(eduSnippet).append(". ");
+                }
+                sb.append("Committed to modern system design principles, test-driven development, and engineering excellence.");
+                break;
+
+            case "LEADERSHIP":
+                sb.append("Visionary and cross-functional ").append(expPhrase).append(", bridging engineering execution with business strategy. ");
+                sb.append("Skilled in leveraging ").append(topTech).append(" to guide development initiatives, mentor technical peers, and drive architectural consistency. ");
+                if (!companyHighlights.isEmpty()) {
+                    sb.append("Proven leadership track record ").append(companyHighlights).append(" driving sprint goals, stakeholder communication, and continuous delivery. ");
+                }
+                sb.append("Excels in ").append(topSoft).append(", fostering inclusive engineering cultures that scale. ");
+                if (!eduSnippet.isEmpty()) {
+                    sb.append("Educational foundation includes a ").append(eduSnippet).append(".");
+                }
+                break;
+
+            case "BALANCED":
+            default:
+                sb.append(expPhrase).append(" specializing in ").append(topTech).append(". ");
+                if (!companyHighlights.isEmpty()) {
+                    sb.append("Proven track record ").append(companyHighlights).append(" designing and deploying secure, user-centric, and high-performance software applications. ");
+                } else {
+                    sb.append("Proven track record designing, building, and deploying secure, user-centric, and scalable software solutions. ");
+                }
+                if (!metrics.isEmpty()) {
+                    sb.append("Accomplished in ").append(metrics.get(0)).append(". ");
+                }
+                if (!eduSnippet.isEmpty()) {
+                    sb.append("Holds a ").append(eduSnippet).append(". ");
+                }
+                sb.append("Adept at ").append(topSoft).append(", with a passion for continuous learning and delivering measurable value in fast-paced collaborative environments.");
+                break;
+        }
+
+        // Custom instruction appendage if provided
+        if (customInstruction != null && !customInstruction.isBlank()) {
+            sb.append(" Special focus: ").append(customInstruction.trim()).append(".");
+        }
+
+        return sb.toString().trim();
     }
 
     // ==========================================

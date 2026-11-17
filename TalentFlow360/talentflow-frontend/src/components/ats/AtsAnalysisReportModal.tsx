@@ -386,7 +386,7 @@ export const AtsAnalysisReportModal: React.FC<AtsAnalysisReportModalProps> = ({
         {/* Modal Footer */}
         <div className="p-4 px-6 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
           <span className="text-[11px] text-slate-400">
-            Powered by TalentFlow 360 AI Resume Engine & MongoDB
+            Powered by TalentFlow 360 AI Resume Intelligence
           </span>
           <Button variant="primary" size="sm" onClick={onClose}>
             Done

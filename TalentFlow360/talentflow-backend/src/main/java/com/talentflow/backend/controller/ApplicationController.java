@@ -1,25 +1,39 @@
 package com.talentflow.backend.controller;
 
+import com.talentflow.backend.document.AtsAnalysisDocument;
+import com.talentflow.backend.document.ResumeDocument;
 import com.talentflow.backend.dto.ApiResponse;
 import com.talentflow.backend.dto.application.ApplicationResponse;
 import com.talentflow.backend.dto.application.ApplicationStatusHistoryResponse;
 import com.talentflow.backend.dto.application.ApplyJobRequest;
 import com.talentflow.backend.dto.application.UpdateApplicationStatusRequest;
 import com.talentflow.backend.entity.Application;
+import com.talentflow.backend.entity.CandidateProfile;
+import com.talentflow.backend.entity.Job;
 import com.talentflow.backend.entity.Resume;
-import com.talentflow.backend.document.ResumeDocument;
+import com.talentflow.backend.exception.ResourceNotFoundException;
+import com.talentflow.backend.repository.ApplicationRepository;
+import com.talentflow.backend.repository.JobRepository;
+import com.talentflow.backend.repository.ResumeRepository;
 import com.talentflow.backend.service.ApplicationService;
+import com.talentflow.backend.service.AtsResumeAnalyzerService;
+import com.talentflow.backend.service.ProfileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/applications")
@@ -28,18 +42,18 @@ import java.util.List;
 public class ApplicationController {
 
     private final ApplicationService applicationService;
-    private final com.talentflow.backend.service.AtsResumeAnalyzerService atsResumeAnalyzerService;
-    private final com.talentflow.backend.repository.JobRepository jobRepository;
-    private final com.talentflow.backend.repository.ResumeRepository resumeRepository;
-    private final com.talentflow.backend.service.ProfileService profileService;
-    private final com.talentflow.backend.repository.ApplicationRepository applicationRepository;
+    private final AtsResumeAnalyzerService atsResumeAnalyzerService;
+    private final JobRepository jobRepository;
+    private final ResumeRepository resumeRepository;
+    private final ProfileService profileService;
+    private final ApplicationRepository applicationRepository;
 
     public ApplicationController(ApplicationService applicationService,
-                                 com.talentflow.backend.service.AtsResumeAnalyzerService atsResumeAnalyzerService,
-                                 com.talentflow.backend.repository.JobRepository jobRepository,
-                                 com.talentflow.backend.repository.ResumeRepository resumeRepository,
-                                 com.talentflow.backend.service.ProfileService profileService,
-                                 com.talentflow.backend.repository.ApplicationRepository applicationRepository) {
+                                 @Lazy AtsResumeAnalyzerService atsResumeAnalyzerService,
+                                 JobRepository jobRepository,
+                                 ResumeRepository resumeRepository,
+                                 ProfileService profileService,
+                                 ApplicationRepository applicationRepository) {
         this.applicationService = applicationService;
         this.atsResumeAnalyzerService = atsResumeAnalyzerService;
         this.jobRepository = jobRepository;
@@ -109,22 +123,27 @@ public class ApplicationController {
     @GetMapping("/{id}/ats-analysis")
     @PreAuthorize("hasAnyRole('JOB_SEEKER', 'RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN')")
     @Operation(summary = "Get MongoDB-backed AI ATS Resume Analysis for an application", description = "Fetches the detailed keyword match, score breakdown, and recommendations stored in MongoDB.")
-    public ResponseEntity<ApiResponse<com.talentflow.backend.document.AtsAnalysisDocument>> getApplicationAtsAnalysis(
+    public ResponseEntity<ApiResponse<AtsAnalysisDocument>> getApplicationAtsAnalysis(
             @PathVariable Long id,
             Authentication authentication) {
-        com.talentflow.backend.document.AtsAnalysisDocument doc = atsResumeAnalyzerService.getAnalysisByApplicationId(id)
+        if (atsResumeAnalyzerService == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(ApiResponse.error("ATS Resume Analyzer service is temporarily unavailable"));
+        }
+
+        AtsAnalysisDocument doc = atsResumeAnalyzerService.getAnalysisByApplicationId(id)
                 .orElseGet(() -> {
-                    com.talentflow.backend.entity.Application app = applicationRepository.findById(id)
-                            .orElseThrow(() -> new com.talentflow.backend.exception.ResourceNotFoundException("Application", "id", id));
+                    Application app = applicationRepository.findById(id)
+                            .orElseThrow(() -> new ResourceNotFoundException("Application", "id", id));
 
                     // 1. Look for existing MongoDB ATS document created for this candidate & job (e.g. if saved with null applicationId)
                     if (app.getCandidateEmail() != null && app.getJob() != null) {
-                        java.util.List<com.talentflow.backend.document.AtsAnalysisDocument> existingList =
+                        List<AtsAnalysisDocument> existingList =
                                 atsResumeAnalyzerService.getAnalysisByCandidateEmail(app.getCandidateEmail());
-                        for (com.talentflow.backend.document.AtsAnalysisDocument existing : existingList) {
+                        for (AtsAnalysisDocument existing : existingList) {
                             if (existing.getJobId() != null && existing.getJobId().equals(app.getJob().getId())) {
                                 existing.setApplicationId(id);
-                                com.talentflow.backend.document.AtsAnalysisDocument linked = atsResumeAnalyzerService.saveAnalysis(existing);
+                                AtsAnalysisDocument linked = atsResumeAnalyzerService.saveAnalysis(existing);
                                 if (app.getAtsScore() == null) {
                                     app.setAtsScore(linked.getAtsScore());
                                     app.setAtsMatchTier(linked.getMatchTier());
@@ -136,7 +155,7 @@ public class ApplicationController {
                     }
 
                     // 2. On-demand evaluation & persistence in MongoDB for legacy or existing applications
-                    com.talentflow.backend.document.AtsAnalysisDocument generated = atsResumeAnalyzerService.analyzeAndSave(app, app.getJob(), app.getResume());
+                    AtsAnalysisDocument generated = atsResumeAnalyzerService.analyzeAndSave(app, app.getJob(), app.getResume());
                     if (generated != null && app.getAtsScore() == null) {
                         app.setAtsScore(generated.getAtsScore());
                         app.setAtsMatchTier(generated.getMatchTier());
@@ -144,18 +163,23 @@ public class ApplicationController {
                     }
                     return generated;
                 });
-        return ResponseEntity.ok(ApiResponse.ok("ATS analysis retrieved from MongoDB", doc));
+        return ResponseEntity.ok(ApiResponse.ok("ATS analysis retrieved successfully", doc));
     }
 
-    @PostMapping(value = "/analyze-ats", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/analyze-ats", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('JOB_SEEKER', 'RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN')")
     @Operation(summary = "AI ATS Resume Scanner & Mistakes Audit", description = "Scans a resume file (from device or saved resume) against a specific job or provides a standalone audit with ATS score, detected mistakes, and step-by-step improvements.")
-    public ResponseEntity<ApiResponse<com.talentflow.backend.document.AtsAnalysisDocument>> analyzeAtsPreApplication(
+    public ResponseEntity<ApiResponse<AtsAnalysisDocument>> analyzeAtsPreApplication(
             @RequestParam(value = "jobId", required = false) Long jobId,
             @RequestParam(value = "targetRole", required = false) String targetRole,
-            @RequestParam(value = "file", required = false) org.springframework.web.multipart.MultipartFile file,
+            @RequestParam(value = "file", required = false) MultipartFile file,
             @RequestParam(value = "resumeId", required = false) Long resumeId,
-            Authentication authentication) throws java.io.IOException {
+            Authentication authentication) throws IOException {
+
+        if (atsResumeAnalyzerService == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(ApiResponse.error("ATS Resume Analyzer service is temporarily unavailable"));
+        }
 
         String userEmail = (authentication != null && authentication.getName() != null)
                 ? authentication.getName()
@@ -169,7 +193,7 @@ public class ApplicationController {
             fileName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "UploadedResume.pdf";
             resumeText = atsResumeAnalyzerService.extractText(bytes, file.getContentType(), fileName);
         } else if (resumeId != null) {
-            java.util.Optional<com.talentflow.backend.document.ResumeDocument> docOpt = profileService.getResumeDocumentBySqlId(resumeId);
+            Optional<ResumeDocument> docOpt = profileService.getResumeDocumentBySqlId(resumeId);
             if (docOpt.isPresent()) {
                 resumeText = docOpt.get().getParsedText();
                 fileName = docOpt.get().getFileName();
@@ -178,8 +202,8 @@ public class ApplicationController {
 
         if (resumeText.isBlank() && authentication != null) {
             try {
-                com.talentflow.backend.entity.CandidateProfile cand = profileService.getOrCreateCandidateProfileEntity(userEmail);
-                java.util.Optional<com.talentflow.backend.document.ResumeDocument> primary = profileService.getResumeDocumentBySqlId(cand.getId());
+                CandidateProfile cand = profileService.getOrCreateCandidateProfileEntity(userEmail);
+                Optional<ResumeDocument> primary = profileService.getCandidatePrimaryResumeDocument(cand.getId());
                 if (primary.isPresent()) {
                     resumeText = primary.get().getParsedText();
                     fileName = primary.get().getFileName();
@@ -187,10 +211,10 @@ public class ApplicationController {
             } catch (Exception ignored) {}
         }
 
-        com.talentflow.backend.document.AtsAnalysisDocument analysis;
+        AtsAnalysisDocument analysis;
         if (jobId != null) {
-            com.talentflow.backend.entity.Job job = jobRepository.findById(jobId)
-                    .orElseThrow(() -> new com.talentflow.backend.exception.ResourceNotFoundException("Job", "id", jobId));
+            Job job = jobRepository.findById(jobId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Job", "id", jobId));
             analysis = atsResumeAnalyzerService.evaluatePreApplication(resumeText, fileName, job, userEmail);
         } else {
             analysis = atsResumeAnalyzerService.auditResumeStandalone(resumeText, fileName, targetRole, userEmail);
@@ -203,18 +227,18 @@ public class ApplicationController {
     @Operation(summary = "Download resume for application", description = "Streams the resume file associated with this application from MongoDB.")
     public ResponseEntity<byte[]> downloadApplicationResume(@PathVariable Long id) {
         Application app = applicationRepository.findById(id)
-                .orElseThrow(() -> new com.talentflow.backend.exception.ResourceNotFoundException("Application", "id", id));
+                .orElseThrow(() -> new ResourceNotFoundException("Application", "id", id));
 
-        java.util.Optional<com.talentflow.backend.document.ResumeDocument> docOpt = java.util.Optional.empty();
+        Optional<ResumeDocument> docOpt = Optional.empty();
         if (app.getResume() != null) {
             docOpt = profileService.getResumeDocumentBySqlId(app.getResume().getId());
         }
         if (docOpt.isEmpty() && app.getCandidateProfile() != null) {
-            docOpt = profileService.getResumeDocumentBySqlId(app.getCandidateProfile().getId());
+            docOpt = profileService.getCandidatePrimaryResumeDocument(app.getCandidateProfile().getId());
         }
 
-        com.talentflow.backend.document.ResumeDocument doc = docOpt
-                .orElseThrow(() -> new com.talentflow.backend.exception.ResourceNotFoundException("ResumeDocument", "applicationId", id));
+        ResumeDocument doc = docOpt
+                .orElseThrow(() -> new ResourceNotFoundException("ResumeDocument", "applicationId", id));
 
         String fileName = doc.getFileName() != null ? doc.getFileName() : "Application_Resume.pdf";
         String contentType = doc.getContentType() != null ? doc.getContentType() : "application/pdf";

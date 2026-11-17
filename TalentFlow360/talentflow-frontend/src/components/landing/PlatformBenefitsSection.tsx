@@ -38,15 +38,15 @@ export const PlatformBenefitsSection: React.FC = () => {
     },
     {
       icon: <ShieldCheck className="w-6 h-6 text-emerald-600" />,
-      title: 'Role-Based Access Control (4 Roles)',
-      description: 'Strict architectural segregation for Job Seekers, Recruiters, HR Managers, and Super Administrators powered by Spring Security 6 and stateless JWT tokens.',
+      title: 'Enterprise Security & Privacy',
+      description: 'Dedicated, secure portals for Job Seekers, Recruiters, HR Managers, and Company Administrators with multi-layer encryption and verified access.',
       badge: 'Security & Compliance'
     },
     {
       icon: <Zap className="w-6 h-6 text-cyan-600" />,
-      title: 'High-Performance Spring Boot 3.4',
-      description: 'Engineered with Java 25, HikariCP connection pooling, MySQL 8.4 database normalization, Flyway schema migrations, and OpenAPI 3 Swagger documentation.',
-      badge: 'Cloud Native'
+      title: 'High-Speed Cloud Infrastructure',
+      description: 'Engineered for 99.99% uptime, instant search speeds, secure cloud data storage, and automated backups to support high-volume hiring.',
+      badge: 'High Performance'
     }
   ];
 
@@ -61,7 +61,7 @@ export const PlatformBenefitsSection: React.FC = () => {
             Built for Real-World Recruitment Workflows
           </h2>
           <p className="text-sm sm:text-base text-slate-500">
-            Engineered from the ground up to replace fragmented spreadsheets, disorganized emails, and basic CRUD toys with a production-grade hiring engine.
+            Engineered from the ground up to replace fragmented spreadsheets and disorganized emails with an intelligent, all-in-one hiring platform.
           </p>
         </div>
 

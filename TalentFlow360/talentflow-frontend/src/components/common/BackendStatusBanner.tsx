@@ -42,7 +42,7 @@ export const BackendStatusBanner: React.FC = () => {
   const getStatusText = () => {
     if (loading && !health) return 'Connecting to Backend...';
     if (error || !health) return 'Backend Offline';
-    return `API: ${health.status} (Spring Boot + MySQL)`;
+    return `System Status: ${health.status === 'UP' ? 'Operational' : health.status}`;
   };
 
   return (

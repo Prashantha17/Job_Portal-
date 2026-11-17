@@ -1038,7 +1038,7 @@ public class AtsResumeAnalyzerService {
         return sb.toString();
     }
 
-    private int extractYearsFromResume(String text) {
+    public int extractYearsFromResume(String text) {
         Matcher m = Pattern.compile("(\\d{1,2})\\+?\\s*(?:years?|yrs?)\\s*(?:of)?\\s*(?:experience|exp)?").matcher(text);
         int max = 0;
         while (m.find()) {

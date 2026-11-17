@@ -749,8 +749,8 @@ export const StandaloneAtsScannerModal: React.FC<StandaloneAtsScannerModalProps>
 
         {/* Modal Footer */}
         <div className="p-4 px-6 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
-          <span className="text-[11px] text-slate-400 flex items-center gap-1 font-mono">
-            Powered by TalentFlow 360 AI ATS Engine & MongoDB
+          <span className="text-[11px] text-slate-400 flex items-center gap-1 font-sans">
+            Powered by TalentFlow 360 AI Resume Intelligence
           </span>
           <Button variant="outline" size="sm" onClick={onClose}>
             Close

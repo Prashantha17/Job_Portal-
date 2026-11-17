@@ -42,6 +42,18 @@ export interface ResumeItem {
   uploadedAt: string;
 }
 
+export interface GenerateSummaryResponse {
+  summary: string;
+  tone: string;
+  skillsCount: number;
+  experiencesCount: number;
+  educationsCount: number;
+  resumeFound: boolean;
+  resumeFileName?: string;
+  highlightedSkills: string[];
+  detectedMetrics: string[];
+}
+
 export interface CandidateProfile {
   id?: number;
   userId?: number;
@@ -201,6 +213,16 @@ export const profileService = {
 
   setPrimaryResume: async (id: number): Promise<ResumeItem> => {
     const response = await api.patch<ResumeItem>(`/api/v1/candidates/me/resume/${id}/primary`);
+    return response.data;
+  },
+
+  // AI Professional Summary Generation
+  generateAiSummary: async (payload?: {
+    tone?: string;
+    customInstruction?: string;
+    includeResumeKeywords?: boolean;
+  }): Promise<GenerateSummaryResponse> => {
+    const response = await api.post<GenerateSummaryResponse>('/api/v1/candidates/me/generate-summary', payload || {});
     return response.data;
   },
 

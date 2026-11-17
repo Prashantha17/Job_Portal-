@@ -128,7 +128,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
       });
       setApplied(true);
       const scoreMsg = res.atsScore != null ? ` (AI ATS Match: ${res.atsScore}%)` : '';
-      setApplySuccessMsg(`Application submitted successfully${scoreMsg}! Resume stored in MongoDB and tracked in Candidate Hub.`);
+      setApplySuccessMsg(`Application submitted successfully${scoreMsg}! Resume attached and tracked in your Candidate Dashboard.`);
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || 'Unable to submit application.';
       if (msg.includes('already submitted') || msg.includes('already applied')) {
@@ -312,12 +312,12 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
                         <Sparkles className="w-4 h-4" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-slate-900">AI ATS Resume Match & Device Upload</h4>
-                        <p className="text-[11px] text-slate-500">Stored in MongoDB with real-time keyword scoring</p>
+                        <h4 className="text-sm font-bold text-slate-900">AI Resume Match & Upload</h4>
+                        <p className="text-[11px] text-slate-500">Instant AI resume review and skill match</p>
                       </div>
                     </div>
                     <span className="text-[10px] font-bold text-brand-700 bg-brand-100/80 px-2.5 py-1 rounded-full border border-brand-200">
-                      MongoDB + PDFBox
+                      ✨ AI Match Powered
                     </span>
                   </div>
 

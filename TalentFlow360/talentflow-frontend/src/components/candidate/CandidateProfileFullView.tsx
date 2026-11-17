@@ -230,18 +230,43 @@ export const CandidateProfileFullView: React.FC<CandidateProfileFullViewProps> =
                 <User className="w-4 h-4 text-brand-600" /> Professional Summary
               </h3>
               {isOwner && onEditProfile && (
-                <button
-                  onClick={onEditProfile}
-                  className="text-xs font-bold text-brand-600 hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <Edit3 className="w-3 h-3" /> Edit Bio
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={onEditProfile}
+                    className="text-xs font-bold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Sparkles className="w-3 h-3 text-purple-600" /> ✨ AI Generate
+                  </button>
+                  <button
+                    onClick={onEditProfile}
+                    className="text-xs font-bold text-brand-600 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Edit3 className="w-3 h-3" /> Edit Bio
+                  </button>
+                </div>
               )}
             </div>
             <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
               {profile.bio ||
                 'No summary provided yet. Candidate has not filled out a detailed bio statement.'}
             </p>
+
+            {!profile.bio && isOwner && onEditProfile && (
+              <div className="mt-4 p-3.5 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 rounded-xl flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                  <p className="text-xs text-purple-900 font-medium">
+                    No summary written yet? Let AI synthesize an ATS-optimized bio from your skills, experience, education, and resume.
+                  </p>
+                </div>
+                <button
+                  onClick={onEditProfile}
+                  className="text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg shadow-sm whitespace-nowrap transition-colors cursor-pointer"
+                >
+                  ✨ AI Write Summary
+                </button>
+              </div>
+            )}
           </div>
         </Card>
 

@@ -11,6 +11,7 @@ import profileService, {
   Education,
   Experience,
   UpdateCandidateProfilePayload,
+  GenerateSummaryResponse,
   downloadResumeFile
 } from '../services/profileService';
 
@@ -178,6 +179,14 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
   const [isAddEduOpen, setIsAddEduOpen] = useState(false);
   const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
   const [isUploadResumeOpen, setIsUploadResumeOpen] = useState(false);
+
+  // AI Professional Summary State
+  const [isGeneratingAiSummary, setIsGeneratingAiSummary] = useState(false);
+  const [aiSummaryTone, setAiSummaryTone] = useState<'BALANCED' | 'RESULTS_DRIVEN' | 'TECHNICAL' | 'LEADERSHIP'>('BALANCED');
+  const [aiCustomInstruction, setAiCustomInstruction] = useState('');
+  const [aiIncludeResume, setAiIncludeResume] = useState(true);
+  const [aiSummaryMeta, setAiSummaryMeta] = useState<GenerateSummaryResponse | null>(null);
+  const [showAiSummaryOptions, setShowAiSummaryOptions] = useState(false);
 
   // Form states
   const [profileForm, setProfileForm] = useState<UpdateCandidateProfilePayload>({});
@@ -384,6 +393,31 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
     }
   };
 
+  // AI Professional Summary Generation
+  const handleGenerateAiSummary = async (toneOverride?: string) => {
+    try {
+      setIsGeneratingAiSummary(true);
+      const toneToUse = toneOverride || aiSummaryTone;
+      const res = await profileService.generateAiSummary({
+        tone: toneToUse,
+        customInstruction: aiCustomInstruction.trim() || undefined,
+        includeResumeKeywords: aiIncludeResume,
+      });
+
+      setProfileForm((prev) => ({
+        ...prev,
+        bio: res.summary,
+      }));
+      setAiSummaryMeta(res);
+      setShowAiSummaryOptions(false);
+    } catch (err: any) {
+      console.error('Failed to generate AI summary:', err);
+      alert(err?.response?.data?.message || 'Failed to generate AI summary. Please ensure your profile has skills, experience, or education.');
+    } finally {
+      setIsGeneratingAiSummary(false);
+    }
+  };
+
   // Add Experience
   const handleAddExperience = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -515,7 +549,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
       setSelectedResumeFile(null);
       setResumeForm({ title: '', fileName: '', filePath: '', isPrimary: true });
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Failed to upload resume to MongoDB');
+      alert(err?.response?.data?.message || 'Failed to upload resume. Please try again.');
     } finally {
       setActionLoading(false);
     }
@@ -1239,7 +1273,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                         downloadResumeFile(targetUrl, resume.fileName || resume.title || 'Candidate_Resume.pdf', resume.id);
                       }}
                       className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl border border-brand-200/80 transition-colors shadow-2xs cursor-pointer"
-                      title="Download resume binary from MongoDB datastore"
+                      title="Download resume"
                     >
                       <Download className="w-3.5 h-3.5 text-brand-600" />
                       <span>Download</span>
@@ -1975,15 +2009,152 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Professional Bio</label>
-                <textarea
-                  rows={4}
-                  value={profileForm.bio || ''}
-                  onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
-                  placeholder="Tell employers about your engineering focus, achievements, and impact..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                ></textarea>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800">
+                      Professional Summary / Bio
+                    </label>
+                    <p className="text-[11px] text-slate-500">
+                      Type manually or let AI generate from your skills, experiences, education & resume.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAiSummaryOptions(!showAiSummaryOptions)}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                      <span>{showAiSummaryOptions ? 'Hide AI Styles' : '✨ AI Styles & Focus'}</span>
+                    </button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleGenerateAiSummary()}
+                      isLoading={isGeneratingAiSummary}
+                      leftIcon={<Sparkles className="w-3.5 h-3.5 text-amber-300" />}
+                      className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs shadow-sm font-semibold"
+                    >
+                      ✨ Generate with AI
+                    </Button>
+                  </div>
+                </div>
+
+                {/* AI Options Panel */}
+                {showAiSummaryOptions && (
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-50/80 via-indigo-50/50 to-slate-50 border border-purple-200 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-600" /> Choose Tone / Focus:
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Synthesizes: Skills + Experience + Education + Resume
+                      </span>
+                    </div>
+
+                    {/* Tone Pills */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { id: 'BALANCED', label: '🎯 Balanced ATS', desc: 'Holistic & versatile profile overview' },
+                        { id: 'RESULTS_DRIVEN', label: '🚀 Results-Driven', desc: 'Focus on metrics & business impact' },
+                        { id: 'TECHNICAL', label: '💻 Technical Depth', desc: 'Deep architecture & code mastery' },
+                        { id: 'LEADERSHIP', label: '👔 Leadership', desc: 'Mentorship, strategy & team impact' },
+                      ].map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            setAiSummaryTone(t.id as any);
+                            handleGenerateAiSummary(t.id);
+                          }}
+                          disabled={isGeneratingAiSummary}
+                          className={`p-2.5 rounded-xl text-left border transition-all text-xs cursor-pointer ${
+                            aiSummaryTone === t.id
+                              ? 'bg-purple-600 text-white border-purple-600 shadow-sm ring-2 ring-purple-300'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-purple-300 hover:bg-purple-50/40'
+                          }`}
+                        >
+                          <div className="font-bold text-xs leading-tight">{t.label}</div>
+                          <div className={`text-[10px] mt-0.5 leading-tight ${aiSummaryTone === t.id ? 'text-purple-100' : 'text-slate-500'}`}>
+                            {t.desc}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Optional Custom Instructions + Resume Toggle */}
+                    <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          value={aiCustomInstruction}
+                          onChange={(e) => setAiCustomInstruction(e.target.value)}
+                          placeholder="Optional focus (e.g. Target senior roles, emphasize AWS & FinTech)"
+                          className="w-full px-3 py-1.5 rounded-lg border border-purple-200 bg-white text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={aiIncludeResume}
+                          onChange={(e) => setAiIncludeResume(e.target.checked)}
+                          className="rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span>Include resume text</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Textarea */}
+                <div className="relative">
+                  <textarea
+                    rows={5}
+                    value={profileForm.bio || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+                    placeholder="Tell employers about your engineering focus, key achievements, and impact (or click '✨ Generate with AI')..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 leading-relaxed font-normal"
+                  ></textarea>
+
+                  {isGeneratingAiSummary && (
+                    <div className="absolute inset-0 bg-white/85 backdrop-blur-xs rounded-xl flex items-center justify-center gap-2 text-purple-700 font-semibold text-xs">
+                      <RefreshCw className="w-4 h-4 animate-spin text-purple-600" />
+                      <span>AI is analyzing skills, experience, education & resume...</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* AI Summary Metadata / Confirmation Banner */}
+                {aiSummaryMeta && (
+                  <div className="p-2.5 rounded-xl bg-purple-50/80 border border-purple-200 text-xs text-purple-900 flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold flex items-center gap-1.5 text-purple-800">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        AI Summary Generated ({aiSummaryMeta.tone.replace('_', ' ')})
+                      </span>
+                      <span className="text-[10px] text-purple-600">
+                        You can manually edit any sentence above before saving.
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+                      <span className="bg-white px-2 py-0.5 rounded border border-purple-100 font-medium">
+                        📊 {aiSummaryMeta.skillsCount} Skills analyzed
+                      </span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-purple-100 font-medium">
+                        💼 {aiSummaryMeta.experiencesCount} Experience(s)
+                      </span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-purple-100 font-medium">
+                        🎓 {aiSummaryMeta.educationsCount} Degree(s)
+                      </span>
+                      {aiSummaryMeta.resumeFound && (
+                        <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 font-medium">
+                          📄 Resume: {aiSummaryMeta.resumeFileName || 'Primary CV'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2410,7 +2581,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
         </div>
       )}
 
-      {/* ================= MODAL: UPLOAD RESUME FROM DEVICE (MONGODB STORED) ================= */}
+      {/* ================= MODAL: UPLOAD RESUME FROM DEVICE ================= */}
       {isUploadResumeOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100">
@@ -2420,8 +2591,8 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                   <Upload className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Upload Device Resume</h3>
-                  <p className="text-[11px] text-slate-500">Stored in MongoDB with AI ATS Indexing</p>
+                  <h3 className="text-base font-bold text-slate-900">Upload Resume</h3>
+                  <p className="text-[11px] text-slate-500">Securely saved with AI resume matching</p>
                 </div>
               </div>
               <button
@@ -2439,7 +2610,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
               {/* Drag and drop / Device File Picker */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Choose Resume File from Device *
+                  Choose Resume File *
                 </label>
                 <div className="relative border-2 border-dashed border-slate-300 hover:border-brand-500 rounded-2xl p-6 text-center transition-colors bg-slate-50/50 hover:bg-brand-50/30 group cursor-pointer">
                   <input
@@ -2471,7 +2642,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                         {(selectedResumeFile.size / 1024).toFixed(1)} KB • {selectedResumeFile.type || 'Document'}
                       </p>
                       <span className="mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                        File Ready to Store in MongoDB
+                        Resume Ready to Upload
                       </span>
                     </div>
                   ) : (
@@ -2518,7 +2689,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 flex items-start gap-2">
                 <Sparkles className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
                 <p>
-                  <strong>MongoDB Datastore:</strong> Your resume is encrypted and safely stored in the MongoDB <code className="font-mono text-brand-700">talentflow_resumes</code> collection. Text is extracted for AI ATS analysis against job vacancies.
+                  <strong>Secure Cloud Storage:</strong> Your resume is encrypted and safely stored with your profile. Our AI automatically scans it to highlight your strengths and match you with top job vacancies.
                 </p>
               </div>
 
@@ -2540,7 +2711,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                   disabled={!selectedResumeFile && !resumeForm.title}
                   leftIcon={<Upload className="w-4 h-4" />}
                 >
-                  Upload to MongoDB
+                  Upload Resume
                 </Button>
               </div>
             </form>

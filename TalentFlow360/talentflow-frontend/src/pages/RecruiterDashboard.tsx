@@ -2102,7 +2102,7 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
             {loadingHistory ? (
               <div className="py-12 text-center">
                 <div className="w-8 h-8 border-3 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto mb-2"></div>
-                <p className="text-xs text-slate-500">Loading audit log from database...</p>
+                <p className="text-xs text-slate-500">Loading status history...</p>
               </div>
             ) : historyItems.length === 0 ? (
               <div className="py-12 text-center text-slate-500 text-xs">
