@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, GitPullRequest, Calendar, BarChart3, ShieldCheck, Zap } from 'lucide-react';
+import { Sparkles, GitPullRequest, Calendar, BarChart3, ShieldCheck, Zap, FileText } from 'lucide-react';
 import { Badge } from '../common/Badge';
 
 export const PlatformBenefitsSection: React.FC = () => {
@@ -9,6 +9,14 @@ export const PlatformBenefitsSection: React.FC = () => {
       title: 'Smart Candidate Matching Engine',
       description: 'Configurable skill-based recommendation algorithm evaluating candidate proficiency, years of experience, certifications, and educational pedigree with an explainable matching score.',
       badge: 'Core Feature'
+    },
+    {
+      icon: <FileText className="w-6 h-6 text-purple-600" />,
+      title: 'AI Resume Builder Studio',
+      description: '10 ATS-optimized designer templates, live dual-pane preview, AI bullet-point enhancer, and 1-click vector PDF generation tailored to Indian tech ecosystem job postings.',
+      badge: 'Candidate Studio',
+      actionUrl: '#resume-builder',
+      actionText: 'Build AI Resume →'
     },
     {
       icon: <GitPullRequest className="w-6 h-6 text-indigo-600" />,
@@ -43,9 +51,9 @@ export const PlatformBenefitsSection: React.FC = () => {
   ];
 
   return (
-    <section id="benefits" className="py-20 bg-slate-50 border-t border-slate-200/80">
+    <section id="benefits" className="pt-12 pb-16 bg-slate-50 border-t border-slate-200/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
+        <div className="text-center max-w-3xl mx-auto mb-10 space-y-3">
           <Badge variant="primary" size="sm">
             <Sparkles className="w-3.5 h-3.5 text-brand-600" /> Platform Architecture
           </Badge>
@@ -81,8 +89,14 @@ export const PlatformBenefitsSection: React.FC = () => {
                 </p>
               </div>
 
-              <div className="pt-5 mt-5 border-t border-slate-100 flex items-center text-xs font-semibold text-brand-600 hover:text-brand-700">
-                Learn how it works →
+              <div className="pt-5 mt-5 border-t border-slate-100 flex items-center text-xs font-semibold">
+                {(benefit as any).actionUrl ? (
+                  <a href={(benefit as any).actionUrl} className="text-purple-600 hover:text-purple-700 flex items-center gap-1 font-bold">
+                    {(benefit as any).actionText}
+                  </a>
+                ) : (
+                  <span className="text-brand-600 hover:text-brand-700 cursor-pointer">Learn how it works →</span>
+                )}
               </div>
             </div>
           ))}

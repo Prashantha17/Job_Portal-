@@ -25,5 +25,8 @@ public interface JobRepository extends JpaRepository<Job, Long>, JpaSpecificatio
 
     @Query("SELECT j FROM Job j JOIN FETCH j.company LEFT JOIN FETCH j.jobSkills js LEFT JOIN FETCH js.skill WHERE j.id = :id")
     java.util.Optional<Job> findByIdWithDetails(@Param("id") Long id);
+
+    @Query("SELECT DISTINCT j FROM Job j JOIN FETCH j.company LEFT JOIN FETCH j.jobSkills js LEFT JOIN FETCH js.skill WHERE j.status = :status ORDER BY j.createdAt DESC")
+    List<Job> findByStatusWithSkills(@Param("status") JobStatus status);
 }
 

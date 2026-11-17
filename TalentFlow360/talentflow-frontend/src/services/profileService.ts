@@ -120,6 +120,16 @@ export const profileService = {
     return response.data;
   },
 
+  getCandidateProfileById: async (id: number): Promise<CandidateProfile> => {
+    const response = await api.get<CandidateProfile>(`/api/v1/candidates/${id}`);
+    return response.data;
+  },
+
+  getCandidateProfileByEmail: async (email: string): Promise<CandidateProfile> => {
+    const response = await api.get<CandidateProfile>(`/api/v1/candidates/by-email?email=${encodeURIComponent(email)}`);
+    return response.data;
+  },
+
   updateCandidateProfile: async (data: UpdateCandidateProfilePayload): Promise<CandidateProfile> => {
     const response = await api.put<CandidateProfile>('/api/v1/candidates/me', data);
     return response.data;
@@ -169,6 +179,17 @@ export const profileService = {
     return response.data;
   },
 
+  uploadResumeFile: async (file: File, title?: string, isPrimary: boolean = true): Promise<ResumeItem> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (title) formData.append('title', title);
+    formData.append('isPrimary', String(isPrimary));
+    const response = await api.post<ResumeItem>('/api/v1/candidates/me/resume/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
   getResumes: async (): Promise<ResumeItem[]> => {
     const response = await api.get<ResumeItem[]>('/api/v1/candidates/me/resume');
     return response.data;
@@ -202,6 +223,43 @@ export const profileService = {
     const response = await api.get<SkillItem[]>(`/api/v1/skills?${params.toString()}`);
     return response.data;
   },
+};
+
+/**
+ * Downloads a resume document from backend/MongoDB, ensuring authentication headers are included.
+ */
+export const downloadResumeFile = async (filePathOrUrl: string, fileName: string = 'Resume.pdf') => {
+  if (!filePathOrUrl) {
+    alert('Resume document is not attached to this candidate profile.');
+    return;
+  }
+
+  let targetUrl = filePathOrUrl;
+  if (!targetUrl.startsWith('http')) {
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+    targetUrl = `${base}${targetUrl.startsWith('/') ? '' : '/'}${targetUrl}`;
+  }
+
+  const token = localStorage.getItem('talentflow_token');
+  const directUrlWithToken = token ? `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}token=${token}` : targetUrl;
+
+  try {
+    const response = await api.get(targetUrl, { responseType: 'blob' });
+    const contentType = response.headers['content-type'] || 'application/pdf';
+    const blob = new Blob([response.data], { type: contentType });
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    console.warn('Axios blob download failed, falling back to direct browser window open with token', err);
+    window.open(directUrlWithToken, '_blank', 'noopener,noreferrer');
+  }
 };
 
 export default profileService;

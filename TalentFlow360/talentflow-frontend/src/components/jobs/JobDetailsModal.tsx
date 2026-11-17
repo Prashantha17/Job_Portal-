@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   X, MapPin, Briefcase, Calendar, Users, Eye, CheckCircle2,
-  Building, ExternalLink, Award, Send, AlertCircle
+  Building, ExternalLink, Award, Send, AlertCircle, Sparkles, Upload
 } from 'lucide-react';
 import { Button } from '../common/Button';
 import { JobDetail, jobService } from '../../services/jobService';
 import { applicationService } from '../../services/applicationService';
+import profileService, { ResumeItem } from '../../services/profileService';
+import { AtsAnalysisReport } from '../../types/application';
 import { useAuth } from '../../context/AuthContext';
 import { formatDetailedLPA } from '../../utils/currencyFormatter';
 
@@ -30,11 +32,23 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [applied, setApplied] = useState(false);
 
+  // Resume selection & ATS pre-scan state
+  const [resumes, setResumes] = useState<ResumeItem[]>([]);
+  const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
+  const [deviceFile, setDeviceFile] = useState<File | null>(null);
+  const [atsScanning, setAtsScanning] = useState(false);
+  const [atsScanResult, setAtsScanResult] = useState<AtsAnalysisReport | null>(null);
+  const [atsScanError, setAtsScanError] = useState<string | null>(null);
+
   useEffect(() => {
     if (isOpen && jobId) {
       setLoading(true);
       setError(null);
       setApplied(false);
+      setAtsScanResult(null);
+      setAtsScanError(null);
+      setDeviceFile(null);
+
       jobService.getJobById(jobId)
         .then((data) => setJob(data))
         .catch((err) => {
@@ -42,10 +56,47 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
           setError('Unable to load job details. Please try again.');
         })
         .finally(() => setLoading(false));
+
+      if (isAuthenticated) {
+        profileService.getCandidateProfile()
+          .then((prof) => {
+            if (prof?.resumes && prof.resumes.length > 0) {
+              setResumes(prof.resumes);
+              const primary = prof.resumes.find((r) => r.isPrimary) || prof.resumes[0];
+              if (primary) setSelectedResumeId(primary.id);
+            }
+          })
+          .catch(() => {
+            // Ignore if recruiter or unauthenticated
+          });
+      }
     }
-  }, [isOpen, jobId]);
+  }, [isOpen, jobId, isAuthenticated]);
 
   if (!isOpen || !jobId) return null;
+
+  const handleRunAtsScan = async () => {
+    if (!job) return;
+    if (!deviceFile && !selectedResumeId) {
+      setAtsScanError('Please select a saved resume or upload a resume file from your device first.');
+      return;
+    }
+    try {
+      setAtsScanning(true);
+      setAtsScanError(null);
+      const report = await applicationService.analyzeAts(
+        job.id,
+        deviceFile || undefined,
+        !deviceFile && selectedResumeId ? selectedResumeId : undefined
+      );
+      setAtsScanResult(report);
+    } catch (err: any) {
+      console.error('ATS Scan failed:', err);
+      setAtsScanError(err?.response?.data?.message || 'Failed to scan resume ATS match.');
+    } finally {
+      setAtsScanning(false);
+    }
+  };
 
   const handleApplyClick = async () => {
     if (!isAuthenticated) {
@@ -61,12 +112,23 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
     try {
       setApplying(true);
       setError(null);
-      await applicationService.applyForJob({
+
+      let effectiveResumeId = selectedResumeId;
+      // If candidate uploaded a device file, store it in MongoDB first!
+      if (deviceFile) {
+        const title = `${job.title} Resume (${deviceFile.name.replace(/\.[^/.]+$/, '')})`;
+        const uploaded = await profileService.uploadResumeFile(deviceFile, title, resumes.length === 0);
+        effectiveResumeId = uploaded.id;
+      }
+
+      const res = await applicationService.applyForJob({
         jobId: job.id,
+        resumeId: effectiveResumeId || undefined,
         coverLetter: `Application for ${job.title} via TalentFlow 360 portal`
       });
       setApplied(true);
-      setApplySuccessMsg('Thank you for applying! A confirmation email has been dispatched directly to your inbox.');
+      const scoreMsg = res.atsScore != null ? ` (AI ATS Match: ${res.atsScore}%)` : '';
+      setApplySuccessMsg(`Application submitted successfully${scoreMsg}! Resume stored in MongoDB and tracked in Candidate Hub.`);
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || 'Unable to submit application.';
       if (msg.includes('already submitted') || msg.includes('already applied')) {
@@ -238,6 +300,158 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
                   <p className="text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line">
                     {job.requirements}
                   </p>
+                </div>
+              )}
+
+              {/* AI ATS Match & Resume Selection Section */}
+              {isAuthenticated && (
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-brand-50/70 via-slate-50 to-indigo-50/40 border border-brand-200/80 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-brand-600 text-white flex items-center justify-center shadow-sm">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">AI ATS Resume Match & Device Upload</h4>
+                        <p className="text-[11px] text-slate-500">Stored in MongoDB with real-time keyword scoring</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-brand-700 bg-brand-100/80 px-2.5 py-1 rounded-full border border-brand-200">
+                      MongoDB + PDFBox
+                    </span>
+                  </div>
+
+                  {/* Resume Source Selector */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Pick existing resume */}
+                    {resumes.length > 0 && (
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-700 block">
+                          Select Saved Resume
+                        </label>
+                        <select
+                          value={deviceFile ? '' : (selectedResumeId || '')}
+                          onChange={(e) => {
+                            setSelectedResumeId(Number(e.target.value));
+                            setDeviceFile(null);
+                            setAtsScanResult(null);
+                          }}
+                          className="w-full text-xs font-medium p-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                          {resumes.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.title} ({r.fileName}) {r.isPrimary ? '★ Primary' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Or Upload file from device */}
+                    <div className={`space-y-1.5 ${resumes.length === 0 ? 'sm:col-span-2' : ''}`}>
+                      <label className="text-[11px] font-bold text-slate-700 block">
+                        {resumes.length > 0 ? 'Or Pick Device File (.pdf, .docx)' : 'Upload Resume from Device (.pdf, .docx) *'}
+                      </label>
+                      <div className="relative flex items-center">
+                        <input
+                          type="file"
+                          accept=".pdf,.docx,.doc,.txt"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setDeviceFile(file);
+                              setAtsScanResult(null);
+                            }
+                          }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                        <div className="w-full flex items-center justify-between p-2.5 rounded-xl border border-dashed border-brand-300 bg-white hover:bg-brand-50/50 transition-colors cursor-pointer">
+                          <span className="text-xs text-slate-600 truncate flex items-center gap-1.5">
+                            <Upload className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+                            {deviceFile ? deviceFile.name : 'Choose file from device...'}
+                          </span>
+                          <span className="text-[10px] font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded shrink-0">
+                            {deviceFile ? `${(deviceFile.size / 1024).toFixed(0)} KB` : 'Browse'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ATS Pre-Scan Button */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                    <p className="text-[11px] text-slate-500">
+                      Scan before submitting to preview match score and missing keywords.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      leftIcon={<Sparkles className="w-3.5 h-3.5 text-brand-600" />}
+                      onClick={handleRunAtsScan}
+                      isLoading={atsScanning}
+                      disabled={!deviceFile && !selectedResumeId}
+                      className="shrink-0 bg-white hover:bg-brand-50 border-brand-300 text-brand-800 text-xs font-bold"
+                    >
+                      Scan ATS Score
+                    </Button>
+                  </div>
+
+                  {atsScanError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span>{atsScanError}</span>
+                    </div>
+                  )}
+
+                  {/* ATS Scan Result Card */}
+                  {atsScanResult && (
+                    <div className="p-4 bg-white rounded-2xl border border-brand-200/90 shadow-sm space-y-3 animate-fadeIn">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm text-white ${
+                            atsScanResult.atsScore >= 80 ? 'bg-emerald-600' : atsScanResult.atsScore >= 60 ? 'bg-brand-600' : 'bg-amber-600'
+                          }`}>
+                            {atsScanResult.atsScore}%
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-slate-900 block">
+                              ATS Match: {atsScanResult.matchTier.replace('_', ' ')}
+                            </span>
+                            <span className="text-[11px] text-slate-500">
+                              Skills: {atsScanResult.skillsScore}% • Experience: {atsScanResult.experienceScore}%
+                            </span>
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                          atsScanResult.atsScore >= 80 ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : atsScanResult.atsScore >= 60 ? 'bg-blue-50 text-blue-800 border-blue-300' : 'bg-amber-50 text-amber-800 border-amber-300'
+                        }`}>
+                          {atsScanResult.atsScore >= 80 ? 'High Match' : atsScanResult.atsScore >= 60 ? 'Good Match' : 'Moderate Match'}
+                        </span>
+                      </div>
+
+                      {atsScanResult.missingKeywords && atsScanResult.missingKeywords.length > 0 && (
+                        <div>
+                          <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider block mb-1">
+                            Keywords to consider adding:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {atsScanResult.missingKeywords.slice(0, 6).map((kw, i) => (
+                              <span key={i} className="text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-lg">
+                                + {kw}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {atsScanResult.suggestions && atsScanResult.suggestions.length > 0 && (
+                        <p className="text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 leading-relaxed">
+                          💡 <strong>Recommendation:</strong> {atsScanResult.suggestions[0]}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

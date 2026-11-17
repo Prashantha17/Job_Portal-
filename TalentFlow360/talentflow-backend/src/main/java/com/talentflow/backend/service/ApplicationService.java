@@ -29,6 +29,7 @@ public class ApplicationService {
     private final ProfileService profileService;
     private final EmailService emailService;
     private final NotificationService notificationService;
+    private final AtsResumeAnalyzerService atsResumeAnalyzerService;
 
     public ApplicationService(ApplicationRepository applicationRepository,
                               ApplicationStatusHistoryRepository historyRepository,
@@ -36,7 +37,8 @@ public class ApplicationService {
                               ResumeRepository resumeRepository,
                               ProfileService profileService,
                               EmailService emailService,
-                              NotificationService notificationService) {
+                              NotificationService notificationService,
+                              AtsResumeAnalyzerService atsResumeAnalyzerService) {
         this.applicationRepository = applicationRepository;
         this.historyRepository = historyRepository;
         this.jobRepository = jobRepository;
@@ -44,6 +46,7 @@ public class ApplicationService {
         this.profileService = profileService;
         this.emailService = emailService;
         this.notificationService = notificationService;
+        this.atsResumeAnalyzerService = atsResumeAnalyzerService;
     }
 
     @Transactional
@@ -110,6 +113,17 @@ public class ApplicationService {
                     : candidateProfile.getExpectedSalary();
         }
         application.setExpectedCtcLpa(expectedCtc);
+
+        // 6. AI ATS Resume Analysis & Scoring (stored in MongoDB)
+        try {
+            com.talentflow.backend.document.AtsAnalysisDocument atsDoc = atsResumeAnalyzerService.analyzeAndSave(application, job, resume);
+            if (atsDoc != null) {
+                application.setAtsScore(atsDoc.getAtsScore());
+                application.setAtsMatchTier(atsDoc.getMatchTier());
+            }
+        } catch (Exception ex) {
+            log.warn("AI ATS Resume analysis failed during application submit: {}", ex.getMessage());
+        }
 
         Application savedApp = applicationRepository.save(application);
 
@@ -371,6 +385,9 @@ public class ApplicationService {
         }
 
         dto.setStatus(app.getStatus());
+        if (app.getCandidateProfile() != null) {
+            dto.setCandidateProfileId(app.getCandidateProfile().getId());
+        }
         dto.setCandidateName(app.getCandidateName());
         dto.setCandidateEmail(app.getCandidateEmail());
         dto.setCandidatePhone(app.getCandidatePhone());
@@ -378,6 +395,8 @@ public class ApplicationService {
         dto.setExpectedCtcLpa(app.getExpectedCtcLpa());
         dto.setCoverLetter(app.getCoverLetter());
         dto.setRejectionReason(app.getRejectionReason());
+        dto.setAtsScore(app.getAtsScore());
+        dto.setAtsMatchTier(app.getAtsMatchTier());
 
         Resume resume = app.getResume();
         if (resume != null) {

@@ -6,10 +6,10 @@ import {
   MapPin, FileText, Clock,
   History, CheckCircle2, Send, Filter,
   Calendar, Video, Star, ExternalLink,
-  BarChart3
+  BarChart3, Sparkles, Eye, RefreshCw, User, Download
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import profileService, { RecruiterProfile, UpdateRecruiterProfilePayload } from '../services/profileService';
+import profileService, { RecruiterProfile, UpdateRecruiterProfilePayload, downloadResumeFile } from '../services/profileService';
 import jobService, {
   JobSummary,
   CreateJobPayload,
@@ -18,7 +18,7 @@ import jobService, {
   JobStatus
 } from '../services/jobService';
 import { applicationService } from '../services/applicationService';
-import { ApplicationResponse, ApplicationStatus, ApplicationStatusHistoryItem } from '../types/application';
+import { ApplicationResponse, ApplicationStatus, ApplicationStatusHistoryItem, AtsAnalysisReport } from '../types/application';
 import { interviewService } from '../services/interviewService';
 import {
   InterviewResponse,
@@ -32,6 +32,11 @@ import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 import { formatLPA } from '../utils/currencyFormatter';
 import { RecruitmentAnalyticsDashboard } from '../components/analytics/RecruitmentAnalyticsDashboard';
+import { matchingService } from '../services/matchingService';
+import { CandidateMatch, MatchBreakdown } from '../types/matching';
+import { MatchBreakdownModal } from '../components/matching/MatchBreakdownModal';
+import { CandidateProfileModal } from '../components/candidate/CandidateProfileModal';
+import { AtsAnalysisReportModal } from '../components/ats/AtsAnalysisReportModal';
 
 interface RecruiterDashboardProps {
   onBackToHome?: () => void;
@@ -244,6 +249,26 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
   const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
   const [selectedStageFilter, setSelectedStageFilter] = useState<string>('ALL');
 
+  // Smart Candidate Matching state
+  const [atsViewSubTab, setAtsViewSubTab] = useState<'applicants' | 'talent_matches'>('applicants');
+  const [applicantMatchesMap, setApplicantMatchesMap] = useState<Map<number, CandidateMatch>>(new Map());
+  const [talentPoolMatches, setTalentPoolMatches] = useState<CandidateMatch[]>([]);
+  const [loadingTalentPool, setLoadingTalentPool] = useState(false);
+  const [activeBreakdownModal, setActiveBreakdownModal] = useState<{
+    title: string;
+    subtitle: string;
+    breakdown: MatchBreakdown;
+  } | null>(null);
+
+  // Full Candidate Profile Modal state
+  const [selectedCandidateForProfileModal, setSelectedCandidateForProfileModal] = useState<{
+    candidateProfileId?: number;
+    email?: string;
+    name?: string;
+    applicationNote?: string;
+    application?: ApplicationResponse;
+  } | null>(null);
+
   // Interview Management State & Handlers
   const [recruiterInterviews, setRecruiterInterviews] = useState<InterviewResponse[]>([]);
   const [loadingInterviews, setLoadingInterviews] = useState(false);
@@ -395,17 +420,58 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
   const [historyItems, setHistoryItems] = useState<ApplicationStatusHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // ATS Analysis Report Modal State
+  const [selectedAtsReport, setSelectedAtsReport] = useState<AtsAnalysisReport | null>(null);
+  const [loadingAtsReport, setLoadingAtsReport] = useState(false);
+  const [atsReportJobTitle, setAtsReportJobTitle] = useState('');
+
+  const handleOpenAtsReport = async (app: ApplicationResponse) => {
+    setLoadingAtsReport(true);
+    setAtsReportJobTitle(app.jobTitle || 'Applicant ATS Analysis');
+    try {
+      const report = await applicationService.getApplicationAtsAnalysis(app.id);
+      setSelectedAtsReport(report);
+    } catch (err: any) {
+      console.error('Failed to load ATS analysis report:', err);
+      setSelectedAtsReport(null);
+    } finally {
+      setLoadingAtsReport(false);
+    }
+  };
+
   const handleViewApplicants = async (job: JobSummary) => {
     setSelectedJobForApplicants(job);
     setSelectedStageFilter('ALL');
+    setAtsViewSubTab('applicants');
     setLoadingApplicants(true);
     try {
-      const data = await applicationService.getJobApplications(job.id);
+      const [data, applicantMatches] = await Promise.all([
+        applicationService.getJobApplications(job.id),
+        matchingService.getJobApplicantMatches(job.id).catch(() => [] as CandidateMatch[])
+      ]);
       setApplicants(data || []);
+      const map = new Map<number, CandidateMatch>();
+      for (const m of applicantMatches) {
+        if (m.applicationId) map.set(m.applicationId, m);
+        if (m.candidateId) map.set(m.candidateId, m);
+      }
+      setApplicantMatchesMap(map);
     } catch (err: any) {
       console.error('Error fetching job applicants:', err);
     } finally {
       setLoadingApplicants(false);
+    }
+  };
+
+  const fetchTalentPoolMatches = async (jobId: number) => {
+    try {
+      setLoadingTalentPool(true);
+      const matches = await matchingService.getTopMatchedCandidatesForJob(jobId, 25);
+      setTalentPoolMatches(matches || []);
+    } catch (err: any) {
+      console.error('Error fetching talent pool matches:', err);
+    } finally {
+      setLoadingTalentPool(false);
     }
   };
 
@@ -1365,6 +1431,39 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
               </div>
             )}
 
+            {/* SUB-TABS: ATS PIPELINE vs SMART TALENT POOL MATCHES */}
+            <div className="flex items-center gap-2 border-b border-slate-200 mb-6">
+              <button
+                type="button"
+                onClick={() => setAtsViewSubTab('applicants')}
+                className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                  atsViewSubTab === 'applicants'
+                    ? 'border-brand-600 text-brand-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Users className="w-4 h-4" /> ATS Applicants ({applicants.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAtsViewSubTab('talent_matches');
+                  if (selectedJobForApplicants) {
+                    fetchTalentPoolMatches(selectedJobForApplicants.id);
+                  }
+                }}
+                className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                  atsViewSubTab === 'talent_matches'
+                    ? 'border-brand-600 text-brand-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-brand-600" /> Smart Talent Pool Matches ({talentPoolMatches.length})
+              </button>
+            </div>
+
+            {atsViewSubTab === 'applicants' ? (
+              <>
             {/* Stage Filter Pills */}
             <div className="mb-6 flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none text-xs">
               <span className="font-bold text-slate-400 uppercase tracking-wider text-[11px] mr-1 flex items-center gap-1 shrink-0">
@@ -1459,6 +1558,7 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
                     const candidateName = app.candidateName || (app as any).candidateFullName || 'Job Seeker';
                     const appInterviews = recruiterInterviews.filter(i => i.applicationId === app.id);
                     const latestInterview = appInterviews.length > 0 ? appInterviews[0] : null;
+                    const matchInfo = applicantMatchesMap.get(app.id) || ((app as any).candidateProfileId ? applicantMatchesMap.get((app as any).candidateProfileId) : undefined);
 
                     return (
                       <Card key={app.id} className="p-5 border border-slate-200/90 hover:border-brand-300 transition-colors">
@@ -1471,6 +1571,38 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
                                 {stageBadge.label}
                               </span>
                               <span className="text-[10px] text-slate-400 font-mono">App #{app.id}</span>
+                              {app.atsScore != null && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenAtsReport(app)}
+                                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-black border transition-all flex items-center gap-1 cursor-pointer shadow-sm ${
+                                    app.atsScore >= 80
+                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                      : app.atsScore >= 60
+                                      ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
+                                      : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                  }`}
+                                  title="Click to view AI ATS Resume Analysis Report"
+                                >
+                                  <Sparkles className="w-3 h-3 text-brand-600" />
+                                  ATS: {app.atsScore}%
+                                </button>
+                              )}
+                              {matchInfo && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveBreakdownModal({
+                                    title: candidateName,
+                                    subtitle: `${app.candidateEmail} • Application #${app.id}`,
+                                    breakdown: matchInfo.breakdown
+                                  })}
+                                  className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-sm hover:scale-105 transition-all flex items-center gap-1 cursor-pointer"
+                                  title="Click to view AI Match Breakdown"
+                                >
+                                  <Sparkles className="w-3 h-3 text-amber-300" />
+                                  {matchInfo.matchScore}% Match
+                                </button>
+                              )}
                             </div>
 
                             <div className="flex flex-wrap items-center gap-3.5 text-xs text-slate-500">
@@ -1585,6 +1717,21 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
                             <div className="flex items-center gap-2 flex-wrap">
                               <button
                                 type="button"
+                                onClick={() => setSelectedCandidateForProfileModal({
+                                  candidateProfileId: app.candidateProfileId,
+                                  email: app.candidateEmail,
+                                  name: app.candidateName,
+                                  applicationNote: app.coverLetter,
+                                  application: app,
+                                })}
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl transition-all border border-brand-200"
+                              >
+                                <User className="w-3.5 h-3.5 text-brand-600" />
+                                View Full Profile
+                              </button>
+
+                              <button
+                                type="button"
                                 onClick={() => handleOpenScheduleModal(app)}
                                 className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 px-3 py-1.5 rounded-xl transition-all shadow-sm shadow-brand-500/20"
                               >
@@ -1600,6 +1747,18 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
                                 <History className="w-3.5 h-3.5 text-brand-600" />
                                 Audit Trail
                               </button>
+
+                              {app.atsScore != null && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenAtsReport(app)}
+                                  className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl transition-all border border-brand-200"
+                                  title="View AI ATS Score breakdown"
+                                >
+                                  <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+                                  ATS Analysis ({app.atsScore}%)
+                                </button>
+                              )}
 
                               {app.resumeUrl && (
                                 <a
@@ -1620,9 +1779,179 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
                   })}
               </div>
             )}
+            </>
+            ) : (
+              /* SMART TALENT POOL MATCHES VIEW */
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-brand-900 to-indigo-950 text-white mb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-500/30 text-brand-300 border border-brand-400/30 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-amber-300" /> AI Candidate Ranker
+                      </span>
+                      <span className="text-xs text-brand-200">Platform Talent Pool</span>
+                    </div>
+                    <h4 className="text-base font-bold text-white">
+                      Top Ranked Candidates for {selectedJobForApplicants.title}
+                    </h4>
+                    <p className="text-xs text-brand-200/80 mt-0.5">
+                      Evaluated on skills, experience, location compatibility, and budget fit.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => fetchTalentPoolMatches(selectedJobForApplicants.id)}
+                    disabled={loadingTalentPool}
+                    className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingTalentPool ? 'animate-spin' : ''}`} />
+                    Recalculate Fit
+                  </button>
+                </div>
+
+                {loadingTalentPool ? (
+                  <div className="py-16 text-center">
+                    <div className="w-10 h-10 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto mb-3"></div>
+                    <p className="text-xs text-slate-500 font-medium">Scoring and ranking talent pool against job criteria...</p>
+                  </div>
+                ) : talentPoolMatches.length === 0 ? (
+                  <div className="py-16 text-center max-w-sm mx-auto">
+                    <div className="w-16 h-16 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center mx-auto mb-3 border border-slate-200">
+                      <Users className="w-8 h-8" />
+                    </div>
+                    <h4 className="text-base font-bold text-slate-800">No Matched Profiles Found</h4>
+                    <p className="text-xs text-slate-500 mt-1">
+                      No candidate profiles currently meet minimum compatibility thresholds.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {talentPoolMatches.map((cand, idx) => (
+                      <Card key={cand.candidateId} className="p-5 border border-slate-200/90 hover:border-brand-300 transition-all">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          <div className="space-y-2 flex-1">
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 text-xs font-black flex items-center justify-center">
+                                #{idx + 1}
+                              </span>
+                              <h4 className="font-bold text-slate-900 text-base">{cand.candidateName}</h4>
+                              <div className="px-2.5 py-0.5 rounded-full text-xs font-black bg-gradient-to-r from-brand-600 to-indigo-600 text-white flex items-center gap-1 shadow-sm">
+                                <Sparkles className="w-3 h-3 text-amber-300" />
+                                {cand.matchScore}% Match
+                              </div>
+                              {cand.hasApplied && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  Already Applied ({cand.applicationStatus || 'Applied'})
+                                </span>
+                              )}
+                            </div>
+
+                            {cand.headline && (
+                              <p className="text-xs text-slate-600 font-medium">{cand.headline}</p>
+                            )}
+
+                            <div className="flex flex-wrap items-center gap-3.5 text-xs text-slate-500">
+                              <span className="flex items-center gap-1 text-slate-700 font-medium">
+                                <Mail className="w-3.5 h-3.5 text-slate-400" />
+                                {cand.email}
+                              </span>
+                              {cand.location && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                  {cand.location}
+                                </span>
+                              )}
+                              <span>Total Exp: <strong>{cand.totalExperienceYears} yrs</strong></span>
+                              {cand.expectedSalary && (
+                                <span>Expected: <strong className="text-brand-600">₹{(cand.expectedSalary / 100000).toFixed(1)} LPA</strong></span>
+                              )}
+                            </div>
+
+                            {/* Skills breakdown preview */}
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                              {cand.breakdown.matchedRequiredSkills.map((s) => (
+                                <span key={s} className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {s}
+                                </span>
+                              ))}
+                              {cand.breakdown.missingRequiredSkills.slice(0, 2).map((s) => (
+                                <span key={s} className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-500">
+                                  Missing: {s}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 flex sm:flex-row lg:flex-col items-center lg:items-end gap-2 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCandidateForProfileModal({
+                                candidateProfileId: cand.candidateId,
+                                email: cand.email,
+                                name: cand.candidateName,
+                              })}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                            >
+                              <User className="w-3.5 h-3.5 text-brand-600" /> View Profile
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setActiveBreakdownModal({
+                                title: cand.candidateName,
+                                subtitle: `${cand.email} • Fit Evaluation for ${selectedJobForApplicants.title}`,
+                                breakdown: cand.breakdown
+                              })}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold text-brand-700 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 border border-brand-200 transition-all flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Inspect Breakdown
+                            </button>
+                            <a
+                              href={`mailto:${cand.email}?subject=Invitation to apply: ${encodeURIComponent(selectedJobForApplicants.title)}`}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center gap-1.5"
+                            >
+                              <Mail className="w-3.5 h-3.5" /> Reach Out
+                            </a>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      {/* MODAL: AI MATCH BREAKDOWN POPUP */}
+      {activeBreakdownModal && (
+        <MatchBreakdownModal
+          isOpen={true}
+          onClose={() => setActiveBreakdownModal(null)}
+          title={activeBreakdownModal.title}
+          subtitle={activeBreakdownModal.subtitle}
+          breakdown={activeBreakdownModal.breakdown}
+        />
+      )}
+
+      {/* MODAL: CANDIDATE COMPREHENSIVE PROFILE MODAL */}
+      <CandidateProfileModal
+        isOpen={Boolean(selectedCandidateForProfileModal)}
+        onClose={() => setSelectedCandidateForProfileModal(null)}
+        candidateProfileId={selectedCandidateForProfileModal?.candidateProfileId}
+        candidateEmail={selectedCandidateForProfileModal?.email}
+        candidateName={selectedCandidateForProfileModal?.name}
+        applicationNote={selectedCandidateForProfileModal?.applicationNote}
+        application={selectedCandidateForProfileModal?.application}
+        onScheduleInterview={
+          selectedCandidateForProfileModal?.application
+            ? () => {
+                const targetApp = selectedCandidateForProfileModal.application!;
+                setSelectedCandidateForProfileModal(null);
+                handleOpenScheduleModal(targetApp);
+              }
+            : undefined
+        }
+      />
 
       {/* MODAL: ADVANCE CANDIDATE STAGE WITH REMARKS & REAL GMAIL DISPATCH */}
       {transitionModalApp && (
@@ -2146,6 +2475,15 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
           </div>
         </div>
       )}
+
+      {/* ================= MODAL: ATS ANALYSIS REPORT ================= */}
+      <AtsAnalysisReportModal
+        report={selectedAtsReport}
+        isOpen={Boolean(selectedAtsReport) || loadingAtsReport}
+        loading={loadingAtsReport}
+        onClose={() => setSelectedAtsReport(null)}
+        jobTitle={atsReportJobTitle}
+      />
     </div>
   );
 };

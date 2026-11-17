@@ -31,6 +31,7 @@ export const Footer: React.FC = () => {
             <h4 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">For Candidates</h4>
             <ul className="space-y-2.5 text-sm">
               <li><a href="#jobs" className="hover:text-white transition-colors">Browse Vacancies</a></li>
+              <li><a href="#resume-builder" className="hover:text-white transition-colors">AI Resume Builder (10 Templates)</a></li>
               <li><a href="#jobs" className="hover:text-white transition-colors">Smart Skill Matcher</a></li>
               <li><a href="#jobs" className="hover:text-white transition-colors">Resume Screening</a></li>
               <li><a href="#jobs" className="hover:text-white transition-colors">Application Tracker</a></li>

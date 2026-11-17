@@ -22,6 +22,8 @@ public class ProfileService {
     private final ResumeRepository resumeRepository;
     private final SkillService skillService;
     private final ProfileMapper profileMapper;
+    private final com.talentflow.backend.mongorepository.ResumeDocumentRepository resumeDocumentRepository;
+    private final AtsResumeAnalyzerService atsResumeAnalyzerService;
 
     public ProfileService(UserRepository userRepository,
                           CandidateProfileRepository candidateProfileRepository,
@@ -31,7 +33,9 @@ public class ProfileService {
                           CandidateSkillRepository candidateSkillRepository,
                           ResumeRepository resumeRepository,
                           SkillService skillService,
-                          ProfileMapper profileMapper) {
+                          ProfileMapper profileMapper,
+                          com.talentflow.backend.mongorepository.ResumeDocumentRepository resumeDocumentRepository,
+                          AtsResumeAnalyzerService atsResumeAnalyzerService) {
         this.userRepository = userRepository;
         this.candidateProfileRepository = candidateProfileRepository;
         this.recruiterProfileRepository = recruiterProfileRepository;
@@ -41,6 +45,8 @@ public class ProfileService {
         this.resumeRepository = resumeRepository;
         this.skillService = skillService;
         this.profileMapper = profileMapper;
+        this.resumeDocumentRepository = resumeDocumentRepository;
+        this.atsResumeAnalyzerService = atsResumeAnalyzerService;
     }
 
     // ==========================================
@@ -62,6 +68,13 @@ public class ProfileService {
     @Transactional
     public CandidateProfileResponse getCandidateProfile(String email) {
         CandidateProfile profile = getOrCreateCandidateProfileEntity(email);
+        return profileMapper.toCandidateProfileResponse(profile);
+    }
+
+    @Transactional(readOnly = true)
+    public CandidateProfileResponse getCandidateProfileById(Long candidateId) {
+        CandidateProfile profile = candidateProfileRepository.findById(candidateId)
+                .orElseThrow(() -> new ResourceNotFoundException("Candidate profile not found for id: " + candidateId));
         return profileMapper.toCandidateProfileResponse(profile);
     }
 
@@ -223,6 +236,95 @@ public class ProfileService {
         );
         Resume saved = resumeRepository.save(resume);
         return profileMapper.toResumeDTO(saved);
+    }
+
+    @Transactional
+    public ResumeDTO uploadResumeFile(String email, org.springframework.web.multipart.MultipartFile file, String title, boolean isPrimary) throws java.io.IOException {
+        CandidateProfile profile = getOrCreateCandidateProfileEntity(email);
+
+        byte[] bytes = file.getBytes();
+        String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "Resume.pdf";
+        String contentType = file.getContentType() != null ? file.getContentType() : "application/pdf";
+        String effectiveTitle = (title != null && !title.isBlank()) ? title.trim() : originalFilename;
+
+        // 1. Extract text for AI ATS Scanning
+        String parsedText = atsResumeAnalyzerService.extractText(bytes, contentType, originalFilename);
+
+        // 2. Reset existing primary resumes in MongoDB & MySQL if this is primary
+        if (isPrimary) {
+            List<Resume> existingSql = resumeRepository.findByCandidateProfile(profile);
+            for (Resume r : existingSql) {
+                if (r.isPrimary()) {
+                    r.setPrimary(false);
+                    resumeRepository.save(r);
+                }
+            }
+            List<com.talentflow.backend.document.ResumeDocument> existingMongo = resumeDocumentRepository.findByCandidateProfileId(profile.getId());
+            for (com.talentflow.backend.document.ResumeDocument doc : existingMongo) {
+                if (doc.isPrimary()) {
+                    doc.setPrimary(false);
+                    resumeDocumentRepository.save(doc);
+                }
+            }
+        }
+
+        // 3. Save to MongoDB (document storage for binary + parsed text)
+        com.talentflow.backend.document.ResumeDocument mongoDoc = new com.talentflow.backend.document.ResumeDocument(
+                profile.getId(),
+                email,
+                effectiveTitle,
+                originalFilename,
+                contentType,
+                file.getSize(),
+                bytes,
+                parsedText,
+                isPrimary
+        );
+        com.talentflow.backend.document.ResumeDocument savedMongoDoc = resumeDocumentRepository.save(mongoDoc);
+
+        // 4. Save metadata to MySQL with download URL pointing to MongoDB
+        String downloadUrl = "/api/v1/candidates/resumes/" + savedMongoDoc.getId() + "/download";
+        Resume sqlResume = new Resume(
+                profile,
+                effectiveTitle,
+                originalFilename,
+                downloadUrl,
+                file.getSize(),
+                contentType,
+                isPrimary
+        );
+        Resume savedSql = resumeRepository.save(sqlResume);
+
+        return profileMapper.toResumeDTO(savedSql);
+    }
+
+    public java.util.Optional<com.talentflow.backend.document.ResumeDocument> getResumeDocument(String mongoId) {
+        return resumeDocumentRepository.findById(mongoId);
+    }
+
+    public java.util.Optional<com.talentflow.backend.document.ResumeDocument> getResumeDocumentBySqlId(Long resumeId) {
+        return resumeRepository.findById(resumeId).flatMap(sqlRes -> {
+            String path = sqlRes.getFilePath();
+            if (path != null && path.contains("/resumes/")) {
+                String[] parts = path.split("/resumes/");
+                if (parts.length > 1) {
+                    String docId = parts[1].replace("/download", "").trim();
+                    java.util.Optional<com.talentflow.backend.document.ResumeDocument> found = resumeDocumentRepository.findById(docId);
+                    if (found.isPresent()) return found;
+                }
+            }
+            // Fallback: check by candidate profile primary resume
+            if (sqlRes.getCandidateProfile() != null) {
+                java.util.Optional<com.talentflow.backend.document.ResumeDocument> primary =
+                        resumeDocumentRepository.findByCandidateProfileIdAndIsPrimaryTrue(sqlRes.getCandidateProfile().getId());
+                if (primary.isPresent()) return primary;
+
+                List<com.talentflow.backend.document.ResumeDocument> list =
+                        resumeDocumentRepository.findByCandidateProfileId(sqlRes.getCandidateProfile().getId());
+                if (!list.isEmpty()) return java.util.Optional.of(list.get(0));
+            }
+            return java.util.Optional.empty();
+        });
     }
 
     @Transactional

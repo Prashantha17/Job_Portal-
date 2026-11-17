@@ -24,6 +24,7 @@ export interface ApplicationResponse {
   maxSalary?: number;
   currency?: string;
   status: ApplicationStatus;
+  candidateProfileId?: number;
   candidateName: string;
   candidateEmail: string;
   candidatePhone?: string;
@@ -36,8 +37,40 @@ export interface ApplicationResponse {
   rejectionReason?: string;
   remarks?: string;
   notes?: string;
+  atsScore?: number;
+  atsMatchTier?: string;
   appliedAt: string;
   updatedAt: string;
+}
+
+export interface AtsAnalysisReport {
+  id?: string;
+  applicationId?: number;
+  jobId?: number;
+  jobTitle?: string;
+  candidateEmail?: string;
+  resumeFileName?: string;
+  atsScore: number;
+  matchTier: 'EXCELLENT_MATCH' | 'STRONG_MATCH' | 'GOOD_MATCH' | 'MODERATE_MATCH' | 'NEEDS_IMPROVEMENT';
+  skillsScore: number;
+  experienceScore: number;
+  keywordScore: number;
+  formatScore: number;
+  matchedKeywords: string[];
+  missingKeywords: string[];
+  topStrengths: string[];
+  suggestions: string[];
+  mistakes?: string[];
+  improvements?: string[];
+  wordCount?: number;
+  candidateNameExtracted?: string;
+  detectedDegree?: string;
+  detectedYearsExp?: number;
+  contactSummary?: string;
+  detectedSections?: string[];
+  bulletAudits?: string[];
+  summary: string;
+  analyzedAt?: string;
 }
 
 export interface ApplyJobRequest {

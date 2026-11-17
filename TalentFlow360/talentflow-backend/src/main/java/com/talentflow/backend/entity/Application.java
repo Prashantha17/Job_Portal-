@@ -54,6 +54,12 @@ public class Application {
     @Column(name = "rejection_reason", length = 255)
     private String rejectionReason;
 
+    @Column(name = "ats_score")
+    private Double atsScore;
+
+    @Column(name = "ats_match_tier", length = 50)
+    private String atsMatchTier;
+
     @Column(name = "applied_at", nullable = false, updatable = false)
     private Instant appliedAt = Instant.now();
 
@@ -121,6 +127,12 @@ public class Application {
 
     public String getRejectionReason() { return rejectionReason; }
     public void setRejectionReason(String rejectionReason) { this.rejectionReason = rejectionReason; }
+
+    public Double getAtsScore() { return atsScore; }
+    public void setAtsScore(Double atsScore) { this.atsScore = atsScore; }
+
+    public String getAtsMatchTier() { return atsMatchTier; }
+    public void setAtsMatchTier(String atsMatchTier) { this.atsMatchTier = atsMatchTier; }
 
     public Instant getAppliedAt() { return appliedAt; }
     public void setAppliedAt(Instant appliedAt) { this.appliedAt = appliedAt; }

@@ -12,15 +12,33 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { AuthModal } from './components/auth/AuthModal';
 import { LiveToastContainer } from './components/notification/LiveToastContainer';
+import { StandaloneAtsScannerModal } from './components/ats/StandaloneAtsScannerModal';
+import { useAuth } from './context/AuthContext';
 
 const AppContent: React.FC = () => {
+  const { isAuthenticated, openAuthModal } = useAuth();
   const [currentView, setCurrentView] = useState<AppView>('home');
+  const [isAtsScannerOpen, setIsAtsScannerOpen] = useState(false);
+
+  const handleOpenAtsScanner = () => {
+    if (!isAuthenticated) {
+      openAuthModal('login');
+    } else {
+      setIsAtsScannerOpen(true);
+    }
+  };
 
   // Synchronize hash or view if needed
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash;
-      if (hash === '#jobs') {
+      if (hash === '#ats-checker') {
+        if (!isAuthenticated) {
+          openAuthModal('login');
+        } else {
+          setIsAtsScannerOpen(true);
+        }
+      } else if (hash === '#jobs') {
         setCurrentView('browse-jobs');
       } else if (hash === '#candidate-hub') {
         setCurrentView('candidate-dashboard');
@@ -65,14 +83,21 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 font-sans">
-      <Navbar currentView={currentView} onNavigate={handleNavigate} />
+      <Navbar
+        currentView={currentView}
+        onNavigate={handleNavigate}
+        onOpenAtsScanner={handleOpenAtsScanner}
+      />
       
       <main className="flex-1">
         {currentView === 'browse-jobs' && (
           <BrowseJobs onBackToHome={() => handleNavigate('home')} />
         )}
         {currentView === 'candidate-dashboard' && (
-          <CandidateDashboard onBackToHome={() => handleNavigate('home')} />
+          <CandidateDashboard
+            onBackToHome={() => handleNavigate('home')}
+            onOpenAtsScanner={handleOpenAtsScanner}
+          />
         )}
         {currentView === 'recruiter-dashboard' && (
           <RecruiterDashboard onBackToHome={() => handleNavigate('home')} />
@@ -93,12 +118,23 @@ const AppContent: React.FC = () => {
           />
         )}
         {currentView === 'home' && (
-          <LandingPage onExploreJobs={() => handleNavigate('browse-jobs')} />
+          <LandingPage
+            onExploreJobs={() => handleNavigate('browse-jobs')}
+            onOpenAtsScanner={handleOpenAtsScanner}
+          />
         )}
       </main>
 
       <Footer />
       <AuthModal />
+
+      {/* Standalone AI ATS Resume Checker & Mistakes Modal */}
+      <StandaloneAtsScannerModal
+        isOpen={isAtsScannerOpen}
+        onClose={() => setIsAtsScannerOpen(false)}
+        onNavigateToBuilder={() => handleNavigate('resume-builder')}
+        onNavigateToJobs={() => handleNavigate('browse-jobs')}
+      />
     </div>
   );
 };

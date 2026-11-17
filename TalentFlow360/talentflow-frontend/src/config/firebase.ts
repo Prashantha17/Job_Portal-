@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, deleteApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, Auth, UserCredential } from 'firebase/auth';
 import { GoogleAuthPayload } from '../types/auth';
 
@@ -13,6 +13,20 @@ export interface FirebaseConfig {
 }
 
 const STORAGE_KEY = 'talentflow_firebase_config';
+
+/**
+ * Reset all active Firebase app instances in memory.
+ */
+export async function resetFirebaseApps(): Promise<void> {
+  const existingApps = getApps();
+  for (const app of existingApps) {
+    try {
+      await deleteApp(app);
+    } catch (e) {
+      console.warn('Error deleting Firebase app instance:', e);
+    }
+  }
+}
 
 /**
  * Retrieve Firebase configuration from LocalStorage or Vite Environment Variables.
@@ -72,10 +86,11 @@ export function isFirebaseConfigured(): boolean {
 /**
  * Save Firebase configuration to LocalStorage and reinitialize.
  */
-export function saveFirebaseConfig(config: FirebaseConfig): boolean {
+export async function saveFirebaseConfig(config: FirebaseConfig): Promise<boolean> {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-    // Reset app if already initialized
+    await resetFirebaseApps();
+    initializeApp(config);
     return true;
   } catch (e) {
     console.error('Failed to save Firebase config:', e);
@@ -84,11 +99,12 @@ export function saveFirebaseConfig(config: FirebaseConfig): boolean {
 }
 
 /**
- * Clear stored Firebase configuration from LocalStorage.
+ * Clear stored Firebase configuration from LocalStorage and memory.
  */
-export function clearFirebaseConfig(): void {
+export async function clearFirebaseConfig(): Promise<void> {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    await resetFirebaseApps();
   } catch (e) {
     console.error('Failed to clear Firebase config:', e);
   }
@@ -102,14 +118,21 @@ export function parseFirebaseConfigSnippet(snippet: string): FirebaseConfig | nu
     // If it's direct JSON
     if (snippet.trim().startsWith('{')) {
       const parsed = JSON.parse(snippet);
-      if (parsed.apiKey && parsed.authDomain) return parsed;
+      if (parsed.apiKey && parsed.authDomain) {
+        return {
+          ...parsed,
+          apiKey: parsed.apiKey.replace(/["',;]/g, '').trim(),
+          authDomain: parsed.authDomain.replace(/["',;]/g, '').trim(),
+          projectId: parsed.projectId ? parsed.projectId.replace(/["',;]/g, '').trim() : '',
+        };
+      }
     }
 
     // Try regex matching common Firebase JS object format
     const extract = (key: string): string => {
       const regex = new RegExp(`${key}\\s*:\\s*["']([^"']+)["']`, 'i');
       const match = snippet.match(regex);
-      return match ? match[1].trim() : '';
+      return match ? match[1].replace(/["',;]/g, '').trim() : '';
     };
 
     const apiKey = extract('apiKey');
@@ -125,7 +148,7 @@ export function parseFirebaseConfigSnippet(snippet: string): FirebaseConfig | nu
         apiKey,
         authDomain,
         projectId,
-        storageBucket,
+        storageBucket: storageBucket || `${projectId}.appspot.com`,
         messagingSenderId,
         appId,
         measurementId,
@@ -148,7 +171,16 @@ export function getFirebaseApp(): FirebaseApp {
 
   const existingApps = getApps();
   if (existingApps.length > 0) {
-    return getApp();
+    const current = getApp();
+    if (current.options.apiKey === config.apiKey && current.options.projectId === config.projectId) {
+      return current;
+    }
+    // Delete stale app synchronously or mark for re-creation
+    try {
+      deleteApp(current);
+    } catch (e) {
+      console.warn('Error clearing stale Firebase app:', e);
+    }
   }
 
   return initializeApp(config);

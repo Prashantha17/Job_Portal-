@@ -111,7 +111,7 @@ export const FirebaseConfigModal: React.FC<FirebaseConfigModalProps> = ({
       messagingSenderId: messagingSenderId.trim(),
     };
 
-    const saved = saveFirebaseConfig(config);
+    const saved = await saveFirebaseConfig(config);
     if (!saved) {
       setError('Failed to save configuration to local storage.');
       return;
@@ -138,6 +138,10 @@ export const FirebaseConfigModal: React.FC<FirebaseConfigModalProps> = ({
         setError(
           'Google Provider is not enabled in your Firebase Project. In Firebase Console, go to Authentication > Sign-in method and enable "Google".'
         );
+      } else if (err.code === 'auth/api-key-not-valid' || err.message?.includes('api-key-not-valid')) {
+        setError(
+          'Firebase rejected this API key (auth/api-key-not-valid). To resolve this in your Firebase Console (job-portal-84c6e): 1) Click "Build > Authentication" and click "Get Started" to initialize Identity Toolkit. 2) Under "Sign-in method", enable "Google" with a support email. 3) Under "Project Settings > General", verify the Web API key.'
+        );
       } else {
         setError(err.message || 'Google sign-in failed. Please verify your Firebase project settings.');
       }
@@ -146,8 +150,8 @@ export const FirebaseConfigModal: React.FC<FirebaseConfigModalProps> = ({
     }
   };
 
-  const handleClear = () => {
-    clearFirebaseConfig();
+  const handleClear = async () => {
+    await clearFirebaseConfig();
     setApiKey('');
     setAuthDomain('');
     setProjectId('');
@@ -193,9 +197,26 @@ export const FirebaseConfigModal: React.FC<FirebaseConfigModalProps> = ({
 
         {/* Status / Notices */}
         {error && (
-          <div className="mx-6 mt-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-            <div className="flex-1">{error}</div>
+          <div className="mx-6 mt-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex flex-col gap-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+              <div className="flex-1 leading-relaxed font-medium">{error}</div>
+            </div>
+            {onSwitchToDemo && (
+              <div className="pt-2 border-t border-rose-200/80 flex items-center justify-between">
+                <span className="text-[11px] text-rose-600 font-medium">Want to test without Firebase setup?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onSwitchToDemo();
+                  }}
+                  className="px-3 py-1 rounded-lg bg-white border border-rose-300 text-[11px] font-bold text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer"
+                >
+                  Switch to 1-Click Demo Google &rarr;
+                </button>
+              </div>
+            )}
           </div>
         )}
 

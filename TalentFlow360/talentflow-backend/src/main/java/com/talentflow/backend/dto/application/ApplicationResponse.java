@@ -20,6 +20,7 @@ public class ApplicationResponse {
     private Double maxSalary;
     private String currency;
     private ApplicationStatus status;
+    private Long candidateProfileId;
     private String candidateName;
     private String candidateEmail;
     private String candidatePhone;
@@ -30,6 +31,8 @@ public class ApplicationResponse {
     private String resumeTitle;
     private String resumeUrl;
     private String rejectionReason;
+    private Double atsScore;
+    private String atsMatchTier;
     private Instant appliedAt;
     private Instant updatedAt;
 
@@ -74,6 +77,9 @@ public class ApplicationResponse {
     public ApplicationStatus getStatus() { return status; }
     public void setStatus(ApplicationStatus status) { this.status = status; }
 
+    public Long getCandidateProfileId() { return candidateProfileId; }
+    public void setCandidateProfileId(Long candidateProfileId) { this.candidateProfileId = candidateProfileId; }
+
     public String getCandidateName() { return candidateName; }
     public void setCandidateName(String candidateName) { this.candidateName = candidateName; }
 
@@ -103,6 +109,12 @@ public class ApplicationResponse {
 
     public String getRejectionReason() { return rejectionReason; }
     public void setRejectionReason(String rejectionReason) { this.rejectionReason = rejectionReason; }
+
+    public Double getAtsScore() { return atsScore; }
+    public void setAtsScore(Double atsScore) { this.atsScore = atsScore; }
+
+    public String getAtsMatchTier() { return atsMatchTier; }
+    public void setAtsMatchTier(String atsMatchTier) { this.atsMatchTier = atsMatchTier; }
 
     public Instant getAppliedAt() { return appliedAt; }
     public void setAppliedAt(Instant appliedAt) { this.appliedAt = appliedAt; }

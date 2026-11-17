@@ -120,7 +120,7 @@ export const AtsPipelinePreview: React.FC = () => {
   const [activeStage, setActiveStage] = useState<PipelineStage>(stages[0]);
 
   return (
-    <section id="ats-pipeline" className="py-20 bg-slate-900 text-white relative overflow-hidden">
+    <section id="ats-pipeline" className="pt-16 pb-12 bg-slate-900 text-white relative overflow-hidden">
       {/* Decorative background glow */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
 

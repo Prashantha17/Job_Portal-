@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Layers, ArrowLeft, Mail, Lock, User, Briefcase, Eye, EyeOff,
-  Sparkles, CheckCircle2, Shield, KeyRound, Phone, Flame
+  Sparkles, CheckCircle2, Shield, KeyRound, Phone
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { useAuth } from '../context/AuthContext';
@@ -184,8 +184,14 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                     <CheckCircle2 className="w-3.5 h-3.5 text-brand-300" />
                   </div>
                   <div>
-                    <strong className="block text-white font-bold">AI Resume Builder & Scorecards</strong>
-                    <span className="text-brand-200 text-[11px]">10 ATS designer templates with vector PDF export.</span>
+                    <strong className="block text-white font-bold">
+                      {role === 'JOB_SEEKER' ? 'AI Resume Builder & Scorecards' : 'Smart ATS Candidate Matching'}
+                    </strong>
+                    <span className="text-brand-200 text-[11px]">
+                      {role === 'JOB_SEEKER'
+                        ? '10 ATS designer templates with vector PDF export.'
+                        : 'Algorithmic candidate fit scoring by technical skills, experience & CTC budget.'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -221,11 +227,10 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setRole('JOB_SEEKER')}
-                  className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer ${
-                    role === 'JOB_SEEKER'
+                  className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer ${role === 'JOB_SEEKER'
                       ? 'border-brand-600 bg-brand-50/50 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <User className={`w-4 h-4 ${role === 'JOB_SEEKER' ? 'text-brand-600' : 'text-slate-400'}`} />
@@ -237,11 +242,10 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setRole('RECRUITER')}
-                  className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer ${
-                    role === 'RECRUITER'
+                  className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer ${role === 'RECRUITER'
                       ? 'border-indigo-600 bg-indigo-50/50 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <Briefcase className={`w-4 h-4 ${role === 'RECRUITER' ? 'text-indigo-600' : 'text-slate-400'}`} />
@@ -298,10 +302,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                 <span className="flex items-center gap-1.5">
                   {hasFirebaseConfig ? (
                     <>
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                        <Flame className="w-3 h-3 text-orange-500 fill-orange-500 inline" /> Real Firebase OAuth
-                      </span>
+
                     </>
                   ) : (
                     <>
@@ -310,13 +311,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                     </>
                   )}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setIsFirebaseModalOpen(true)}
-                  className="font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
-                >
-                  {hasFirebaseConfig ? 'Settings' : 'Attach Firebase &rarr;'}
-                </button>
+
               </div>
 
               {/* Divider */}

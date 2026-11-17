@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Layers, ArrowLeft, Mail, Lock, Eye, EyeOff, Sparkles, CheckCircle2,
-  Shield, KeyRound, Flame
+  Shield, KeyRound
 } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { useAuth } from '../context/AuthContext';
@@ -180,8 +180,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     <Sparkles className="w-3.5 h-3.5 text-brand-300" />
                   </div>
                   <div>
-                    <strong className="block text-white font-bold">AI Resume Studio</strong>
-                    <span className="text-brand-200 text-[11px]">10 tailored ATS templates with 1-click vector PDF export.</span>
+                    <strong className="block text-white font-bold">Smart Matching & Sourcing</strong>
+                    <span className="text-brand-200 text-[11px]">Algorithmic 4-part fit scoring and intelligent candidate recommendations.</span>
                   </div>
                 </div>
 
@@ -228,7 +228,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   Sign In to TalentFlow 360
                 </h1>
                 <p className="text-xs text-slate-500 mt-1">
-                  Access your profile, job applications, ATS pipeline & AI resume builder.
+                  Access your profile, job applications, ATS pipeline & hiring operations.
                 </p>
               </div>
 
@@ -277,10 +277,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 <span className="flex items-center gap-1.5">
                   {hasFirebaseConfig ? (
                     <>
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                        <Flame className="w-3 h-3 text-orange-500 fill-orange-500 inline" /> Real Firebase OAuth
-                      </span>
+
                     </>
                   ) : (
                     <>
@@ -289,13 +286,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     </>
                   )}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setIsFirebaseModalOpen(true)}
-                  className="font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
-                >
-                  {hasFirebaseConfig ? 'Settings' : 'Attach Firebase &rarr;'}
-                </button>
+
               </div>
 
               {/* Divider */}
@@ -315,11 +306,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     setLoginMethod('password');
                     clearError();
                   }}
-                  className={`py-2 rounded-lg transition-all cursor-pointer ${
-                    loginMethod === 'password'
+                  className={`py-2 rounded-lg transition-all cursor-pointer ${loginMethod === 'password'
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'hover:text-slate-900'
-                  }`}
+                    }`}
                 >
                   Password Login
                 </button>
@@ -329,11 +319,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     setLoginMethod('otp');
                     clearError();
                   }}
-                  className={`py-2 rounded-lg transition-all cursor-pointer ${
-                    loginMethod === 'otp'
+                  className={`py-2 rounded-lg transition-all cursor-pointer ${loginMethod === 'otp'
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'hover:text-slate-900'
-                  }`}
+                    }`}
                 >
                   Instant OTP Login
                 </button>

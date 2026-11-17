@@ -2,6 +2,9 @@ server:
   port: 8080
   servlet:
     context-path: /
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 20MB
 
 spring:
   application:
@@ -31,6 +34,11 @@ spring:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
     open-in-view: false
+
+  data:
+    mongodb:
+      uri: ${MONGO_URI:mongodb://127.0.0.1:27017/talentflow_resumes}
+      auto-index-creation: true
 
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}

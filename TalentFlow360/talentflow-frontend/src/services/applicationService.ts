@@ -1,6 +1,6 @@
 import apiClient from './api';
 import { ApiResponse } from '../types/health';
-import { ApplicationResponse, ApplyJobRequest, ApplicationStatusHistoryItem } from '../types/application';
+import { ApplicationResponse, ApplyJobRequest, ApplicationStatusHistoryItem, AtsAnalysisReport } from '../types/application';
 
 export const applicationService = {
   async applyForJob(payload: ApplyJobRequest): Promise<ApplicationResponse> {
@@ -34,6 +34,28 @@ export const applicationService = {
 
   async getApplicationHistory(applicationId: number): Promise<ApplicationStatusHistoryItem[]> {
     const response = await apiClient.get<ApiResponse<ApplicationStatusHistoryItem[]>>(`/api/v1/applications/${applicationId}/history`);
+    return response.data.data;
+  },
+
+  async analyzeAts(jobId?: number, file?: File, resumeId?: number, targetRole?: string): Promise<AtsAnalysisReport> {
+    const formData = new FormData();
+    if (jobId) formData.append('jobId', String(jobId));
+    if (targetRole) formData.append('targetRole', targetRole);
+    if (file) formData.append('file', file);
+    if (resumeId) formData.append('resumeId', String(resumeId));
+
+    const response = await apiClient.post<ApiResponse<AtsAnalysisReport>>('/api/v1/applications/analyze-ats', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  },
+
+  async auditResumeStandalone(file?: File, resumeId?: number, targetRole?: string): Promise<AtsAnalysisReport> {
+    return this.analyzeAts(undefined, file, resumeId, targetRole);
+  },
+
+  async getApplicationAtsAnalysis(applicationId: number): Promise<AtsAnalysisReport> {
+    const response = await apiClient.get<ApiResponse<AtsAnalysisReport>>(`/api/v1/applications/${applicationId}/ats-analysis`);
     return response.data.data;
   },
 };

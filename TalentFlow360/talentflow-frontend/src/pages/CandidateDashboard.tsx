@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   User, Briefcase, GraduationCap, Award, FileText, Plus, Trash2, Edit3,
-  ExternalLink, Mail, Phone, MapPin, Globe, Github, Linkedin,
+  ExternalLink, Mail, Phone, MapPin,
   CheckCircle2, Star, Sparkles, X, AlertCircle, ArrowLeft, LogIn, Send, Clock, Check,
-  History, Video, Calendar, AlertTriangle, RefreshCw
+  History, Video, Calendar, AlertTriangle, RefreshCw, Upload
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import profileService, {
@@ -13,23 +13,26 @@ import profileService, {
   UpdateCandidateProfilePayload
 } from '../services/profileService';
 import { applicationService } from '../services/applicationService';
-import { ApplicationResponse, ApplicationStatusHistoryItem } from '../types/application';
+import { ApplicationResponse, ApplicationStatusHistoryItem, AtsAnalysisReport } from '../types/application';
 import { interviewService } from '../services/interviewService';
 import { InterviewResponse } from '../types/interview';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
-import { formatSingleSalary } from '../utils/currencyFormatter';
+import { RecommendedJobsSection } from '../components/matching/RecommendedJobsSection';
+import { CandidateProfileFullView } from '../components/candidate/CandidateProfileFullView';
+import { AtsAnalysisReportModal } from '../components/ats/AtsAnalysisReportModal';
 
 interface CandidateDashboardProps {
   onBackToHome?: () => void;
+  onOpenAtsScanner?: () => void;
 }
 
-export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackToHome }) => {
+export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackToHome, onOpenAtsScanner }) => {
   const { user, isAuthenticated, login, logout, openAuthModal } = useAuth();
   const [profile, setProfile] = useState<CandidateProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'experience' | 'education' | 'skills' | 'resumes' | 'applications' | 'interviews'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'recommendations' | 'experience' | 'education' | 'skills' | 'resumes' | 'applications' | 'interviews'>('overview');
   const [applications, setApplications] = useState<ApplicationResponse[]>([]);
   const [loadingApplications, setLoadingApplications] = useState(false);
 
@@ -100,6 +103,14 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
     filePath: '',
     isPrimary: true
   });
+
+  // ATS Report Modal state
+  const [selectedAtsReport, setSelectedAtsReport] = useState<AtsAnalysisReport | null>(null);
+  const [loadingAtsReport, setLoadingAtsReport] = useState(false);
+  const [atsReportJobTitle, setAtsReportJobTitle] = useState('');
+
+  // Device file upload state
+  const [selectedResumeFile, setSelectedResumeFile] = useState<File | null>(null);
 
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -362,27 +373,51 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
     }
   };
 
-  // Upload Resume
+  // Upload Resume (MongoDB file or manual metadata)
   const handleUploadResume = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resumeForm.title || !resumeForm.fileName) return;
+    if (!selectedResumeFile && (!resumeForm.title || !resumeForm.fileName)) {
+      alert('Please select a resume file from your device.');
+      return;
+    }
     try {
       setActionLoading(true);
-      await profileService.uploadResume({
-        title: resumeForm.title,
-        fileName: resumeForm.fileName,
-        filePath: resumeForm.filePath || `/uploads/resumes/${resumeForm.fileName}`,
-        fileSize: 245000,
-        contentType: 'application/pdf',
-        isPrimary: resumeForm.isPrimary
-      });
+      if (selectedResumeFile) {
+        const title = resumeForm.title.trim() || selectedResumeFile.name.replace(/\.[^/.]+$/, "");
+        await profileService.uploadResumeFile(selectedResumeFile, title, resumeForm.isPrimary);
+      } else {
+        await profileService.uploadResume({
+          title: resumeForm.title,
+          fileName: resumeForm.fileName,
+          filePath: resumeForm.filePath || `/uploads/resumes/${resumeForm.fileName}`,
+          fileSize: 245000,
+          contentType: 'application/pdf',
+          isPrimary: resumeForm.isPrimary
+        });
+      }
       await fetchProfile();
       setIsUploadResumeOpen(false);
+      setSelectedResumeFile(null);
       setResumeForm({ title: '', fileName: '', filePath: '', isPrimary: true });
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Failed to register resume');
+      alert(err?.response?.data?.message || 'Failed to upload resume to MongoDB');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // View ATS Analysis Modal
+  const handleViewAtsAnalysis = async (app: ApplicationResponse) => {
+    setLoadingAtsReport(true);
+    setAtsReportJobTitle(app.jobTitle || 'Job Application');
+    try {
+      const report = await applicationService.getApplicationAtsAnalysis(app.id);
+      setSelectedAtsReport(report);
+    } catch (err: any) {
+      console.error('Failed to load ATS analysis report:', err);
+      setSelectedAtsReport(null);
+    } finally {
+      setLoadingAtsReport(false);
     }
   };
 
@@ -597,7 +632,17 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <User className="w-4 h-4" /> Overview & Bio
+          <User className="w-4 h-4" /> Complete Profile
+        </button>
+        <button
+          onClick={() => setActiveTab('recommendations')}
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeTab === 'recommendations'
+              ? 'border-brand-600 text-brand-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-brand-600" /> Recommended Jobs 🎯
         </button>
         <button
           onClick={() => setActiveTab('experience')}
@@ -667,128 +712,15 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
         </button>
       </div>
 
-      {/* TAB 1: OVERVIEW & BIO */}
+      {/* TAB 1: COMPLETE CANDIDATE PROFILE */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
-            <Card className="p-6">
-              <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
-                <User className="w-5 h-5 text-brand-600" /> Professional Summary
-              </h3>
-              <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
-                {profile.bio || 'No bio written yet. Click "Edit Profile Info" to describe your technical expertise, career highlights, and software engineering philosophy.'}
-              </p>
-            </Card>
-
-            {/* Quick Skills Glance */}
-            <Card className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <Award className="w-5 h-5 text-brand-600" /> Core Tech Stack
-                </h3>
-                <button
-                  onClick={() => setActiveTab('skills')}
-                  className="text-xs font-bold text-brand-600 hover:underline cursor-pointer"
-                >
-                  Manage All Skills &rarr;
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {profile.skills.length > 0 ? (
-                  profile.skills.map((skill) => (
-                    <span
-                      key={skill.id}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors"
-                    >
-                      <span>{skill.skillName}</span>
-                      <span className="text-[10px] font-bold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
-                        {skill.proficiencyLevel}
-                      </span>
-                    </span>
-                  ))
-                ) : (
-                  <p className="text-slate-400 text-xs">No skills listed yet.</p>
-                )}
-              </div>
-            </Card>
-          </div>
-
-          {/* Right Column: Compensation & Social Profiles */}
-          <div className="space-y-6">
-            <Card className="p-6">
-              <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
-                <span className="font-bold text-emerald-600 text-lg leading-none">₹</span> Salary Expectations (CTC)
-              </h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                  <span className="text-xs font-medium text-slate-500">Current Salary</span>
-                  <span className="text-sm font-bold text-slate-900">
-                    {formatSingleSalary(profile.currentSalary)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-emerald-50/60 border border-emerald-100 rounded-xl">
-                  <span className="text-xs font-medium text-emerald-800">Target CTC</span>
-                  <span className="text-sm font-bold text-emerald-700">
-                    {formatSingleSalary(profile.expectedSalary)}
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
-                <Globe className="w-4 h-4 text-brand-600" /> Online Profiles
-              </h3>
-              <div className="space-y-3">
-                {profile.linkedinUrl ? (
-                  <a
-                    href={profile.linkedinUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-brand-500 hover:bg-brand-50/50 transition-all text-xs font-semibold text-slate-700"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Linkedin className="w-4 h-4 text-blue-600" /> LinkedIn Profile
-                    </span>
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                  </a>
-                ) : (
-                  <span className="text-xs text-slate-400 block p-2">LinkedIn not provided</span>
-                )}
-
-                {profile.githubUrl ? (
-                  <a
-                    href={profile.githubUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-brand-500 hover:bg-brand-50/50 transition-all text-xs font-semibold text-slate-700"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Github className="w-4 h-4 text-slate-900" /> GitHub Portfolio
-                    </span>
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                  </a>
-                ) : (
-                  <span className="text-xs text-slate-400 block p-2">GitHub not provided</span>
-                )}
-
-                {profile.websiteUrl && (
-                  <a
-                    href={profile.websiteUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-brand-500 hover:bg-brand-50/50 transition-all text-xs font-semibold text-slate-700"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-brand-600" /> Personal Website
-                    </span>
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                  </a>
-                )}
-              </div>
-            </Card>
-          </div>
-        </div>
+        <CandidateProfileFullView
+          profile={profile}
+          isOwner={true}
+          showHeaderBanner={false}
+          onEditProfile={() => setIsEditProfileOpen(true)}
+          onNavigateTab={(tab) => setActiveTab(tab as any)}
+        />
       )}
 
       {/* TAB 2: WORK EXPERIENCE */}
@@ -1013,6 +945,15 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                 Launch AI Builder (10 Templates)
               </Button>
               <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Sparkles className="w-3.5 h-3.5 text-amber-600" />}
+                className="bg-amber-50 hover:bg-amber-100/80 border-amber-300 text-amber-900 font-bold text-xs"
+                onClick={onOpenAtsScanner}
+              >
+                Scan ATS Score & Mistakes
+              </Button>
+              <Button
                 variant="primary"
                 size="sm"
                 leftIcon={<Plus className="w-4 h-4" />}
@@ -1072,7 +1013,19 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 self-end sm:self-center">
+                  <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
+                    {resume.filePath && (
+                      <a
+                        href={resume.filePath.startsWith('http') ? resume.filePath : `http://localhost:8080${resume.filePath}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl border border-brand-200 transition-colors"
+                        title="Download resume binary from MongoDB datastore"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Download
+                      </a>
+                    )}
                     {!resume.isPrimary && (
                       <Button
                         variant="ghost"
@@ -1280,7 +1233,25 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                       </div>
 
                       {/* Right metadata & audit button */}
-                      <div className="shrink-0 flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-3">
+                      <div className="shrink-0 flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2.5">
+                        {app.atsScore != null && (
+                          <button
+                            type="button"
+                            onClick={() => handleViewAtsAnalysis(app)}
+                            className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition-all border shadow-sm ${
+                              app.atsScore >= 80
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                : app.atsScore >= 60
+                                ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
+                                : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                            }`}
+                            title="Click to view detailed AI ATS resume match analysis"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+                            <span>ATS Match: <strong>{app.atsScore}%</strong></span>
+                          </button>
+                        )}
+
                         <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/80 font-medium">
                           <Check className="w-3.5 h-3.5" />
                           Confirmation Email Sent
@@ -1593,6 +1564,14 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB 8: RECOMMENDED JOBS (PHASE 9) */}
+      {activeTab === 'recommendations' && (
+        <RecommendedJobsSection
+          onApplyForJob={onBackToHome}
+          onNavigateToSkills={() => setActiveTab('skills')}
+        />
       )}
 
       {/* MODAL: CANDIDATE AUDIT TRAIL / STATUS HISTORY */}
@@ -2067,18 +2046,86 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
         </div>
       )}
 
-      {/* ================= MODAL: UPLOAD RESUME ================= */}
+      {/* ================= MODAL: UPLOAD RESUME FROM DEVICE (MONGODB STORED) ================= */}
       {isUploadResumeOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Upload Resume Document</h3>
-              <button onClick={() => setIsUploadResumeOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center font-bold">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Upload Device Resume</h3>
+                  <p className="text-[11px] text-slate-500">Stored in MongoDB with AI ATS Indexing</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsUploadResumeOpen(false);
+                  setSelectedResumeFile(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleUploadResume} className="space-y-4">
+              {/* Drag and drop / Device File Picker */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Choose Resume File from Device *
+                </label>
+                <div className="relative border-2 border-dashed border-slate-300 hover:border-brand-500 rounded-2xl p-6 text-center transition-colors bg-slate-50/50 hover:bg-brand-50/30 group cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.doc,.txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setSelectedResumeFile(file);
+                        if (!resumeForm.title) {
+                          setResumeForm({
+                            ...resumeForm,
+                            title: file.name.replace(/\.[^/.]+$/, "")
+                          });
+                        }
+                      }
+                    }}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                  />
+                  {selectedResumeFile ? (
+                    <div className="flex flex-col items-center">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2 shadow-sm">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                      <p className="text-xs font-bold text-slate-900 break-all max-w-[280px]">
+                        {selectedResumeFile.name}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {(selectedResumeFile.size / 1024).toFixed(1)} KB • {selectedResumeFile.type || 'Document'}
+                      </p>
+                      <span className="mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        File Ready to Store in MongoDB
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                        <Upload className="w-6 h-6" />
+                      </div>
+                      <p className="text-xs font-bold text-slate-800">
+                        Click to select or drag & drop resume
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        PDF, DOCX, DOC, or TXT (Max 15MB)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Resume Title / Label *</label>
                 <input
@@ -2086,20 +2133,8 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                   required
                   value={resumeForm.title}
                   onChange={(e) => setResumeForm({ ...resumeForm, title: e.target.value })}
-                  placeholder="e.g. Senior Software Engineer 2026 Resume"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">File Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={resumeForm.fileName}
-                  onChange={(e) => setResumeForm({ ...resumeForm, fileName: e.target.value })}
-                  placeholder="Aarav_Patel_Resume.pdf"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono text-xs"
+                  placeholder="e.g. Senior Full Stack Engineer Resume 2026"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
 
@@ -2109,16 +2144,40 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                   id="isPrimaryResume"
                   checked={resumeForm.isPrimary}
                   onChange={(e) => setResumeForm({ ...resumeForm, isPrimary: e.target.checked })}
-                  className="w-4 h-4 text-brand-600 rounded focus:ring-brand-500"
+                  className="w-4 h-4 text-brand-600 rounded focus:ring-brand-500 cursor-pointer"
                 />
-                <label htmlFor="isPrimaryResume" className="text-xs font-medium text-slate-700">
-                  Set as primary resume for applications
+                <label htmlFor="isPrimaryResume" className="text-xs font-medium text-slate-700 cursor-pointer">
+                  Set as primary application resume
                 </label>
               </div>
 
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
+                <p>
+                  <strong>MongoDB Datastore:</strong> Your resume is encrypted and safely stored in the MongoDB <code className="font-mono text-brand-700">talentflow_resumes</code> collection. Text is extracted for AI ATS analysis against job vacancies.
+                </p>
+              </div>
+
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                <Button variant="ghost" type="button" onClick={() => setIsUploadResumeOpen(false)}>Cancel</Button>
-                <Button variant="primary" type="submit" isLoading={actionLoading}>Upload Document</Button>
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={() => {
+                    setIsUploadResumeOpen(false);
+                    setSelectedResumeFile(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  type="submit"
+                  isLoading={actionLoading}
+                  disabled={!selectedResumeFile && !resumeForm.title}
+                  leftIcon={<Upload className="w-4 h-4" />}
+                >
+                  Upload to MongoDB
+                </Button>
               </div>
             </form>
           </div>
@@ -2202,6 +2261,15 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
           </div>
         </div>
       )}
+
+      {/* ================= MODAL: ATS ANALYSIS REPORT ================= */}
+      <AtsAnalysisReportModal
+        report={selectedAtsReport}
+        isOpen={Boolean(selectedAtsReport) || loadingAtsReport}
+        loading={loadingAtsReport}
+        onClose={() => setSelectedAtsReport(null)}
+        jobTitle={atsReportJobTitle}
+      />
     </div>
   );
 };

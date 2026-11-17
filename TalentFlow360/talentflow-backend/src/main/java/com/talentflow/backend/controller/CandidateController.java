@@ -41,6 +41,22 @@ public class CandidateController {
         return ResponseEntity.ok(profile);
     }
 
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN', 'JOB_SEEKER')")
+    @Operation(summary = "Get candidate profile by ID for recruiters and administrators")
+    public ResponseEntity<CandidateProfileResponse> getCandidateProfileById(@PathVariable Long id) {
+        CandidateProfileResponse profile = profileService.getCandidateProfileById(id);
+        return ResponseEntity.ok(profile);
+    }
+
+    @GetMapping("/by-email")
+    @PreAuthorize("hasAnyRole('RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN', 'JOB_SEEKER')")
+    @Operation(summary = "Get candidate profile by email for recruiters and administrators")
+    public ResponseEntity<CandidateProfileResponse> getCandidateProfileByEmail(@RequestParam String email) {
+        CandidateProfileResponse profile = profileService.getCandidateProfile(email);
+        return ResponseEntity.ok(profile);
+    }
+
     @PutMapping("/me")
     @PreAuthorize("hasAnyRole('JOB_SEEKER', 'SUPER_ADMIN')")
     @Operation(summary = "Update current candidate's profile details")
@@ -147,5 +163,59 @@ public class CandidateController {
             Authentication authentication) {
         ResumeDTO updated = profileService.setPrimaryResume(getAuthenticatedEmail(authentication), id);
         return ResponseEntity.ok(updated);
+    }
+
+    @PostMapping(value = "/me/resume/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('JOB_SEEKER', 'SUPER_ADMIN')")
+    @Operation(summary = "Upload resume file from device and store in MongoDB", description = "Stores raw file bytes & parsed text in MongoDB collection 'resumes' and syncs metadata to MySQL.")
+    public ResponseEntity<ResumeDTO> uploadResumeFile(
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @RequestParam(value = "title", required = false) String title,
+            @RequestParam(value = "isPrimary", defaultValue = "true") boolean isPrimary,
+            Authentication authentication) throws java.io.IOException {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("Uploaded resume file cannot be empty");
+        }
+        ResumeDTO created = profileService.uploadResumeFile(getAuthenticatedEmail(authentication), file, title, isPrimary);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @GetMapping("/resumes/{mongoId}/download")
+    @Operation(summary = "Download candidate resume directly from MongoDB document storage")
+    public ResponseEntity<byte[]> downloadResumeFromMongo(@PathVariable String mongoId) {
+        java.util.Optional<com.talentflow.backend.document.ResumeDocument> docOpt = profileService.getResumeDocument(mongoId);
+
+        // Fallback: If mongoId is numeric, try SQL ID lookup
+        if (docOpt.isEmpty() && mongoId.matches("\\d+")) {
+            docOpt = profileService.getResumeDocumentBySqlId(Long.parseLong(mongoId));
+        }
+
+        com.talentflow.backend.document.ResumeDocument doc = docOpt
+                .orElseThrow(() -> new com.talentflow.backend.exception.ResourceNotFoundException("ResumeDocument", "id", mongoId));
+
+        String contentType = doc.getContentType() != null ? doc.getContentType() : "application/pdf";
+        String fileName = doc.getFileName() != null ? doc.getFileName() : "Resume.pdf";
+        byte[] data = doc.getFileData() != null ? doc.getFileData() : new byte[0];
+
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType(contentType))
+                .body(data);
+    }
+
+    @GetMapping("/resumes/by-id/{resumeId}/download")
+    @Operation(summary = "Download candidate resume by SQL ID from MongoDB document storage")
+    public ResponseEntity<byte[]> downloadResumeBySqlId(@PathVariable Long resumeId) {
+        com.talentflow.backend.document.ResumeDocument doc = profileService.getResumeDocumentBySqlId(resumeId)
+                .orElseThrow(() -> new com.talentflow.backend.exception.ResourceNotFoundException("ResumeDocument", "resumeId", resumeId));
+
+        String contentType = doc.getContentType() != null ? doc.getContentType() : "application/pdf";
+        String fileName = doc.getFileName() != null ? doc.getFileName() : "Resume.pdf";
+        byte[] data = doc.getFileData() != null ? doc.getFileData() : new byte[0];
+
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType(contentType))
+                .body(data);
     }
 }
