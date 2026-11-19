@@ -3,7 +3,8 @@ import {
   User, Briefcase, GraduationCap, Award, FileText, Plus, Trash2, Edit3,
   ExternalLink, Mail, Phone, MapPin,
   CheckCircle2, Star, Sparkles, X, AlertCircle, ArrowLeft, LogIn, Send, Clock, Check,
-  History, Video, Calendar, AlertTriangle, RefreshCw, Upload, Download
+  History, Video, Calendar, AlertTriangle, RefreshCw, Upload, Download,
+  MessageSquare, Lightbulb
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import profileService, {
@@ -129,6 +130,8 @@ import { Card } from '../components/common/Card';
 import { RecommendedJobsSection } from '../components/matching/RecommendedJobsSection';
 import { CandidateProfileFullView } from '../components/candidate/CandidateProfileFullView';
 import { AtsAnalysisReportModal } from '../components/ats/AtsAnalysisReportModal';
+import { DirectChatModal } from '../components/chat/DirectChatModal';
+import { ConstructiveFeedbackModal } from '../components/ats/ConstructiveFeedbackModal';
 
 interface CandidateDashboardProps {
   onBackToHome?: () => void;
@@ -227,6 +230,10 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
   const [selectedAtsReport, setSelectedAtsReport] = useState<AtsAnalysisReport | null>(null);
   const [loadingAtsReport, setLoadingAtsReport] = useState(false);
   const [atsReportJobTitle, setAtsReportJobTitle] = useState('');
+
+  // Phase A: Direct Chat & Constructive Feedback Modals
+  const [activeChatApp, setActiveChatApp] = useState<ApplicationResponse | null>(null);
+  const [constructiveFeedbackAppId, setConstructiveFeedbackAppId] = useState<number | null>(null);
 
   // Device file upload state
   const [selectedResumeFile, setSelectedResumeFile] = useState<File | null>(null);
@@ -686,7 +693,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fadeIn">
       {/* Top Breadcrumb & Action bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-6 border-b border-slate-200 mb-8 gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-6 border-b border-slate-200 mb-6 sm:mb-8 gap-4">
         <div>
           <button
             onClick={onBackToHome}
@@ -697,15 +704,16 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Candidate Career Hub
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Manage your personal profile, credentials, ATS matching skills, and verified resumes
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <Button
             variant="outline"
             size="sm"
+            className="flex-1 sm:flex-initial text-xs sm:text-sm justify-center"
             leftIcon={<Edit3 className="w-3.5 h-3.5 text-brand-600" />}
             onClick={() => setIsEditProfileOpen(true)}
           >
@@ -714,6 +722,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
           <Button
             variant="primary"
             size="sm"
+            className="flex-1 sm:flex-initial text-xs sm:text-sm justify-center"
             leftIcon={<Plus className="w-3.5 h-3.5" />}
             onClick={() => setIsUploadResumeOpen(true)}
           >
@@ -723,20 +732,20 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
       </div>
 
       {/* Profile Header Hero Card */}
-      <div className="bg-gradient-to-br from-brand-900 via-brand-800 to-indigo-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-brand-900/10 mb-8 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-brand-900 via-brand-800 to-indigo-950 rounded-2xl sm:rounded-3xl p-5 sm:p-8 text-white shadow-xl shadow-brand-900/10 mb-6 sm:mb-8 relative overflow-hidden">
         <div className="absolute right-0 top-0 -mt-12 -mr-12 w-96 h-96 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
-          <div className="flex items-center gap-5">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-tr from-brand-400 to-indigo-400 p-1 shadow-lg shrink-0">
+        <div className="flex flex-col md:flex-row items-center md:items-center justify-between gap-6 relative z-10">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-6 w-full md:w-auto">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-tr from-brand-400 to-indigo-400 p-1 shadow-lg shrink-0 mx-auto sm:mx-0">
               <div className="w-full h-full bg-brand-900 rounded-xl flex items-center justify-center text-white font-extrabold text-2xl sm:text-3xl uppercase">
                 {profile.firstName ? profile.firstName.charAt(0) : 'C'}
                 {profile.lastName ? profile.lastName.charAt(0) : 'P'}
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center gap-3 flex-wrap">
+            <div className="w-full">
+              <div className="flex items-center justify-center sm:justify-start gap-2.5 flex-wrap">
                 <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
                   {profile.fullName || `${profile.firstName} ${profile.lastName}`}
                 </h2>
@@ -745,27 +754,27 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                 </span>
               </div>
 
-              <p className="text-brand-100 text-sm font-medium mt-1">
+              <p className="text-brand-100 text-xs sm:text-sm font-medium mt-1">
                 {profile.headline || 'Full Stack Software Engineer'}
               </p>
 
-              <div className="flex items-center gap-4 text-xs text-brand-200/80 mt-3 flex-wrap">
+              <div className="flex items-center justify-center sm:justify-start gap-2.5 sm:gap-4 text-xs text-brand-200/90 mt-3 flex-wrap">
                 {profile.location && (
                   <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-brand-300" /> {profile.location}
+                    <MapPin className="w-3.5 h-3.5 text-brand-300 shrink-0" /> {profile.location}
                   </span>
                 )}
-                <span className="flex items-center gap-1">
-                  <Mail className="w-3.5 h-3.5 text-brand-300" /> {profile.email}
+                <span className="flex items-center gap-1 truncate max-w-[220px] sm:max-w-none">
+                  <Mail className="w-3.5 h-3.5 text-brand-300 shrink-0" /> {profile.email}
                 </span>
                 {profile.phone && (
                   <span className="flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-brand-300" /> {profile.phone}
+                    <Phone className="w-3.5 h-3.5 text-brand-300 shrink-0" /> {profile.phone}
                   </span>
                 )}
                 {profile.totalExperienceYears !== undefined && (
                   <span className="flex items-center gap-1">
-                    <Briefcase className="w-3.5 h-3.5 text-brand-300" /> {profile.totalExperienceYears} yrs experience
+                    <Briefcase className="w-3.5 h-3.5 text-brand-300 shrink-0" /> {profile.totalExperienceYears} yrs experience
                   </span>
                 )}
               </div>
@@ -786,7 +795,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                 style={{ width: `${completionScore}%` }}
               ></div>
             </div>
-            <p className="text-[11px] text-brand-200 mt-2">
+            <p className="text-[11px] text-brand-200 mt-2 text-center md:text-left">
               {completionScore === 100
                 ? 'All sections complete! High visibility with recruiters.'
                 : 'Complete all sections to maximize your ATS match score.'}
@@ -796,10 +805,10 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
       </div>
 
       {/* Tabs navigation */}
-      <div className="flex border-b border-slate-200 mb-8 overflow-x-auto gap-2">
+      <div className="flex border-b border-slate-200 mb-6 sm:mb-8 overflow-x-auto gap-1 sm:gap-2 no-scrollbar scroll-smooth -mb-px flex-nowrap py-1">
         <button
           onClick={() => setActiveTab('overview')}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+          className={`shrink-0 py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeTab === 'overview'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -809,7 +818,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
         </button>
         <button
           onClick={() => setActiveTab('recommendations')}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+          className={`shrink-0 py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeTab === 'recommendations'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -819,7 +828,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
         </button>
         <button
           onClick={() => setActiveTab('experience')}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+          className={`shrink-0 py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeTab === 'experience'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -829,7 +838,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
         </button>
         <button
           onClick={() => setActiveTab('education')}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+          className={`shrink-0 py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeTab === 'education'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -839,7 +848,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
         </button>
         <button
           onClick={() => setActiveTab('skills')}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+          className={`shrink-0 py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeTab === 'skills'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -849,7 +858,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
         </button>
         <button
           onClick={() => setActiveTab('resumes')}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+          className={`shrink-0 py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeTab === 'resumes'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -862,7 +871,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
             setActiveTab('applications');
             fetchApplications();
           }}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+          className={`shrink-0 py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeTab === 'applications'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -875,7 +884,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
             setActiveTab('interviews');
             fetchInterviews();
           }}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+          className={`shrink-0 py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeTab === 'interviews'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -1056,7 +1065,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
 
           {/* Category Filter Pills */}
           {profile.skills.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs no-scrollbar flex-nowrap">
               <button
                 type="button"
                 onClick={() => setSkillFilterCategory('ALL')}
@@ -1182,30 +1191,31 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                 Upload up-to-date PDF resumes or craft a job-winning CV with our 10-template AI generator.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
               <Button
                 variant="outline"
                 size="sm"
-                className="border-purple-300 text-purple-700 bg-purple-50/50 hover:bg-purple-100 shadow-xs"
+                className="w-full sm:w-auto justify-center border-purple-300 text-purple-700 bg-purple-50/50 hover:bg-purple-100 shadow-xs text-xs"
                 leftIcon={<Sparkles className="w-4 h-4 text-purple-600" />}
                 onClick={() => {
                   window.location.hash = '#resume-builder';
                 }}
               >
-                Launch AI Builder (10 Templates)
+                Launch AI Builder
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 leftIcon={<Sparkles className="w-3.5 h-3.5 text-amber-600" />}
-                className="bg-amber-50 hover:bg-amber-100/80 border-amber-300 text-amber-900 font-bold text-xs"
+                className="w-full sm:w-auto justify-center bg-amber-50 hover:bg-amber-100/80 border-amber-300 text-amber-900 font-bold text-xs"
                 onClick={onOpenAtsScanner}
               >
-                Scan ATS Score & Mistakes
+                Scan ATS Score
               </Button>
               <Button
                 variant="primary"
                 size="sm"
+                className="w-full sm:w-auto justify-center text-xs"
                 leftIcon={<Plus className="w-4 h-4" />}
                 onClick={() => setIsUploadResumeOpen(true)}
               >
@@ -1306,16 +1316,17 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
       {/* TAB 6: MY APPLICATIONS */}
       {activeTab === 'applications' && (
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Submitted Applications & ATS Pipeline</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">Submitted Applications & ATS Pipeline</h3>
+              <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
                 Real-time tracking of your job applications and recruitment stages across Indian companies.
               </p>
             </div>
             <Button
               variant="outline"
               size="sm"
+              className="w-full sm:w-auto justify-center"
               onClick={fetchApplications}
               isLoading={loadingApplications}
             >
@@ -1390,17 +1401,17 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                 const currentStageIdx = PIPELINE_STAGES.findIndex(s => s.key === app.status);
 
                 return (
-                  <Card key={app.id} className="p-6 hover:shadow-lg transition-all border border-slate-200/90">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-center gap-2.5 mb-1.5">
-                          <h4 className="font-bold text-slate-900 text-lg">{app.jobTitle}</h4>
+                  <Card key={app.id} className="p-4 sm:p-6 hover:shadow-lg transition-all border border-slate-200/90">
+                    <div className="flex flex-col lg:flex-row items-start justify-between gap-4">
+                      <div className="flex-1 w-full">
+                        <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                          <h4 className="font-bold text-slate-900 text-base sm:text-lg">{app.jobTitle}</h4>
                           <span className={`text-[11px] font-bold px-3 py-0.5 rounded-full border ${badge.bg}`}>
                             {badge.label}
                           </span>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-3.5 text-xs text-slate-500 mb-4">
+                        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3.5 text-xs text-slate-500 mb-4">
                           <span className="font-bold text-slate-800">{app.companyName}</span>
                           {(app.location || (app as any).jobLocation) && (
                             <span className="flex items-center gap-1">
@@ -1416,11 +1427,11 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
 
                         {/* Visual 10-Stage ATS Stepper */}
                         {app.status !== 'REJECTED' && app.status !== 'WITHDRAWN' ? (
-                          <div className="my-5 p-4 bg-slate-50/80 rounded-2xl border border-slate-200/60">
-                            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">
+                          <div className="my-4 sm:my-5 p-3 sm:p-4 bg-slate-50/80 rounded-2xl border border-slate-200/60 overflow-hidden">
+                            <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2.5 sm:mb-3">
                               10-Stage ATS Progression Pipeline
                             </div>
-                            <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 relative">
+                            <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 sm:gap-2 relative">
                               {PIPELINE_STAGES.map((st, index) => {
                                 const isPassed = currentStageIdx >= 0 && index < currentStageIdx;
                                 const isCurrent = index === currentStageIdx;
@@ -1428,22 +1439,22 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                                 return (
                                   <div key={st.key} className="flex flex-col items-center text-center">
                                     <div
-                                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                                      className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[11px] sm:text-xs font-bold transition-all ${
                                         isPassed
-                                          ? 'bg-emerald-500 text-white shadow-sm'
+                                          ? 'bg-emerald-500 text-white shadow-2xs'
                                           : isCurrent
-                                          ? 'bg-brand-600 text-white ring-4 ring-brand-100 shadow-md animate-pulse'
+                                          ? 'bg-brand-600 text-white ring-2 sm:ring-4 ring-brand-100 shadow-md animate-pulse'
                                           : 'bg-slate-200 text-slate-500'
                                       }`}
                                     >
                                       {isPassed ? (
-                                        <Check className="w-4 h-4 stroke-[3]" />
+                                        <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
                                       ) : (
                                         <span>{index + 1}</span>
                                       )}
                                     </div>
                                     <span
-                                      className={`text-[10px] mt-1.5 font-semibold leading-tight line-clamp-1 ${
+                                      className={`text-[9px] sm:text-[10px] mt-1 font-semibold leading-tight line-clamp-1 ${
                                         isCurrent
                                           ? 'text-brand-700 font-bold'
                                           : isPassed
@@ -1484,41 +1495,64 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                         )}
                       </div>
 
-                      {/* Right metadata & audit button */}
-                      <div className="shrink-0 flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2.5">
-                        {app.atsScore != null && (
-                          <button
-                            type="button"
-                            onClick={() => handleViewAtsAnalysis(app)}
-                            className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition-all border shadow-sm ${
-                              app.atsScore >= 80
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                                : app.atsScore >= 60
-                                ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
-                                : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
-                            }`}
-                            title="Click to view detailed AI ATS resume match analysis"
-                          >
-                            <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-                            <span>ATS Match: <strong>{app.atsScore}%</strong></span>
-                          </button>
-                        )}
+                      {/* Right metadata & action buttons */}
+                      <div className="w-full lg:w-auto shrink-0 flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end justify-start gap-2 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                        <div className="flex items-center justify-between sm:justify-start lg:justify-end gap-2 flex-wrap">
+                          {app.atsScore != null && (
+                            <button
+                              type="button"
+                              onClick={() => handleViewAtsAnalysis(app)}
+                              className={`inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition-all border shadow-2xs ${
+                                app.atsScore >= 80
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                  : app.atsScore >= 60
+                                  ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
+                                  : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                              }`}
+                              title="Click to view detailed AI ATS resume match analysis"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+                              <span>ATS Match: <strong>{app.atsScore}%</strong></span>
+                            </button>
+                          )}
 
-                        <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/80 font-medium">
-                          <Check className="w-3.5 h-3.5" />
-                          Confirmation Email Sent
+                          <div className="flex items-center justify-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/80 font-medium">
+                            <Check className="w-3.5 h-3.5" />
+                            Confirmation Sent
+                          </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleViewApplicationHistory(app)}
-                          className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3.5 py-2 rounded-xl transition-all border border-brand-200/80 shadow-sm"
-                        >
-                          <History className="w-3.5 h-3.5 text-brand-600" />
-                          View Audit History
-                        </button>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 lg:flex lg:flex-col gap-2 w-full lg:w-auto mt-1 sm:mt-0">
+                          <button
+                            type="button"
+                            onClick={() => setActiveChatApp(app)}
+                            className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3.5 py-2 rounded-xl transition-all border border-indigo-200/80 shadow-2xs cursor-pointer w-full"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Direct Chat</span>
+                          </button>
 
-                        <span className="text-[10px] text-slate-400 font-mono">
+                          <button
+                            type="button"
+                            onClick={() => setConstructiveFeedbackAppId(app.id)}
+                            className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-3.5 py-2 rounded-xl transition-all border border-amber-200/80 shadow-2xs cursor-pointer w-full"
+                            title="View personalized constructive feedback and skill gap analysis"
+                          >
+                            <Lightbulb className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Skill Gap & Feedback</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleViewApplicationHistory(app)}
+                            className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3.5 py-2 rounded-xl transition-all border border-brand-200/80 shadow-2xs cursor-pointer w-full"
+                          >
+                            <History className="w-3.5 h-3.5 text-brand-600" />
+                            <span>Audit History</span>
+                          </button>
+                        </div>
+
+                        <span className="text-[10px] text-slate-400 font-mono text-center sm:text-right mt-0.5">
                           Ref: #{app.id}
                         </span>
                       </div>
@@ -2805,6 +2839,28 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
         onClose={() => setSelectedAtsReport(null)}
         jobTitle={atsReportJobTitle}
       />
+
+      {/* ================= MODAL: DIRECT CHAT ================= */}
+      {activeChatApp && (
+        <DirectChatModal
+          isOpen={Boolean(activeChatApp)}
+          onClose={() => setActiveChatApp(null)}
+          applicationId={activeChatApp.id}
+          jobTitle={activeChatApp.jobTitle}
+          companyName={activeChatApp.companyName}
+          counterpartName="Hiring Team"
+          currentUserEmail={user?.email || ''}
+        />
+      )}
+
+      {/* ================= MODAL: CONSTRUCTIVE FEEDBACK ================= */}
+      {constructiveFeedbackAppId && (
+        <ConstructiveFeedbackModal
+          isOpen={Boolean(constructiveFeedbackAppId)}
+          onClose={() => setConstructiveFeedbackAppId(null)}
+          applicationId={constructiveFeedbackAppId}
+        />
+      )}
     </div>
   );
 };

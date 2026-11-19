@@ -73,9 +73,9 @@ export const CandidateProfileFullView: React.FC<CandidateProfileFullViewProps> =
 
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             {/* Left: Avatar + Identity Info */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 min-w-0">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-5 min-w-0 w-full md:w-auto">
               {/* Avatar Box with Initials */}
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-tr from-brand-400 to-indigo-400 p-1 shadow-xl shrink-0">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-tr from-brand-400 to-indigo-400 p-1 shadow-xl shrink-0 mx-auto sm:mx-0">
                 <div className="w-full h-full bg-slate-900 rounded-xl flex items-center justify-center text-white font-black text-2xl sm:text-3xl uppercase tracking-wider">
                   {profile.firstName ? profile.firstName.charAt(0) : 'C'}
                   {profile.lastName ? profile.lastName.charAt(0) : ''}
@@ -83,8 +83,8 @@ export const CandidateProfileFullView: React.FC<CandidateProfileFullViewProps> =
               </div>
 
               {/* Name, Headline, and Contact Chips */}
-              <div className="space-y-1.5 min-w-0">
-                <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="space-y-1.5 min-w-0 w-full">
+                <div className="flex items-center justify-center sm:justify-start gap-2.5 flex-wrap">
                   <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
                     {profile.fullName || `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Candidate Profile'}
                   </h2>
@@ -98,7 +98,7 @@ export const CandidateProfileFullView: React.FC<CandidateProfileFullViewProps> =
                 </p>
 
                 {/* Contact & Meta Badges */}
-                <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-300">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-1 text-xs text-slate-300">
                   {profile.location && (
                     <span className="flex items-center gap-1 text-slate-300">
                       <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
@@ -134,7 +134,7 @@ export const CandidateProfileFullView: React.FC<CandidateProfileFullViewProps> =
             </div>
 
             {/* Right: Portfolio Links & Action Buttons */}
-            <div className="flex flex-wrap sm:flex-col items-start sm:items-end gap-2.5 shrink-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+            <div className="flex flex-wrap sm:flex-col items-center sm:items-end justify-center sm:justify-start gap-2.5 shrink-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-800 w-full md:w-auto">
               <div className="flex items-center gap-2 flex-wrap">
                 {profile.linkedinUrl && (
                   <a

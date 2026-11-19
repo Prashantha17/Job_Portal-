@@ -1,8 +1,10 @@
 import { Client, IMessage, StompConfig } from '@stomp/stompjs';
 import { NotificationItem } from '../types/notification';
+import { ChatMessage } from '../types/chat';
 
 export type NotificationCallback = (notification: NotificationItem) => void;
 export type UnreadCountCallback = (count: number) => void;
+export type ChatMessageCallback = (message: ChatMessage) => void;
 
 class WebSocketService {
   private client: Client | null = null;
@@ -152,6 +154,29 @@ class WebSocketService {
     callback(this.connected);
     return () => {
       this.connectionCallbacks.delete(callback);
+    };
+  }
+
+  public subscribeToApplicationChat(applicationId: number, callback: ChatMessageCallback): () => void {
+    if (!this.client || !this.connected) {
+      this.connect();
+    }
+    const topic = `/topic/applications/${applicationId}/chat`;
+    const sub = this.client?.subscribe(topic, (message: IMessage) => {
+      try {
+        const data: ChatMessage = JSON.parse(message.body);
+        callback(data);
+      } catch (err) {
+        console.warn('Failed to parse chat message from WS:', err);
+      }
+    });
+
+    return () => {
+      try {
+        sub?.unsubscribe();
+      } catch (e) {
+        // ignore
+      }
     };
   }
 

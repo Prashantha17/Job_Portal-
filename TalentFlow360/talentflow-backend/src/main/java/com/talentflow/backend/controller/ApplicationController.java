@@ -6,6 +6,7 @@ import com.talentflow.backend.dto.ApiResponse;
 import com.talentflow.backend.dto.application.ApplicationResponse;
 import com.talentflow.backend.dto.application.ApplicationStatusHistoryResponse;
 import com.talentflow.backend.dto.application.ApplyJobRequest;
+import com.talentflow.backend.dto.application.ConstructiveFeedbackResponse;
 import com.talentflow.backend.dto.application.UpdateApplicationStatusRequest;
 import com.talentflow.backend.entity.Application;
 import com.talentflow.backend.entity.CandidateProfile;
@@ -49,11 +50,11 @@ public class ApplicationController {
     private final ApplicationRepository applicationRepository;
 
     public ApplicationController(ApplicationService applicationService,
-                                 @Lazy AtsResumeAnalyzerService atsResumeAnalyzerService,
-                                 JobRepository jobRepository,
-                                 ResumeRepository resumeRepository,
-                                 ProfileService profileService,
-                                 ApplicationRepository applicationRepository) {
+            @Lazy AtsResumeAnalyzerService atsResumeAnalyzerService,
+            JobRepository jobRepository,
+            ResumeRepository resumeRepository,
+            ProfileService profileService,
+            ApplicationRepository applicationRepository) {
         this.applicationService = applicationService;
         this.atsResumeAnalyzerService = atsResumeAnalyzerService;
         this.jobRepository = jobRepository;
@@ -78,14 +79,17 @@ public class ApplicationController {
         ApplicationResponse response = applicationService.applyForJob(getAuthenticatedEmail(authentication), request);
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body(ApiResponse.ok("Application submitted successfully. A confirmation email has been dispatched to your inbox.", response));
+                .body(ApiResponse.ok(
+                        "Application submitted successfully. A confirmation email has been dispatched to your inbox.",
+                        response));
     }
 
     @GetMapping("/my-applications")
     @PreAuthorize("hasAnyRole('JOB_SEEKER', 'SUPER_ADMIN')")
     @Operation(summary = "Get current candidate's submitted applications", description = "Returns all active job applications for the logged-in candidate with real-time ATS statuses.")
     public ResponseEntity<ApiResponse<List<ApplicationResponse>>> getMyApplications(Authentication authentication) {
-        List<ApplicationResponse> list = applicationService.getCandidateApplications(getAuthenticatedEmail(authentication));
+        List<ApplicationResponse> list = applicationService
+                .getCandidateApplications(getAuthenticatedEmail(authentication));
         return ResponseEntity.ok(ApiResponse.ok("Candidate applications retrieved", list));
     }
 
@@ -106,7 +110,8 @@ public class ApplicationController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateApplicationStatusRequest request,
             Authentication authentication) {
-        ApplicationResponse updated = applicationService.updateApplicationStatus(id, getAuthenticatedEmail(authentication), request);
+        ApplicationResponse updated = applicationService.updateApplicationStatus(id,
+                getAuthenticatedEmail(authentication), request);
         return ResponseEntity.ok(ApiResponse.ok("Applicant status updated successfully", updated));
     }
 
@@ -116,7 +121,8 @@ public class ApplicationController {
     public ResponseEntity<ApiResponse<List<ApplicationStatusHistoryResponse>>> getStatusHistory(
             @PathVariable Long id,
             Authentication authentication) {
-        List<ApplicationStatusHistoryResponse> history = applicationService.getApplicationHistory(id, getAuthenticatedEmail(authentication));
+        List<ApplicationStatusHistoryResponse> history = applicationService.getApplicationHistory(id,
+                getAuthenticatedEmail(authentication));
         return ResponseEntity.ok(ApiResponse.ok("Application history retrieved successfully", history));
     }
 
@@ -136,10 +142,11 @@ public class ApplicationController {
                     Application app = applicationRepository.findById(id)
                             .orElseThrow(() -> new ResourceNotFoundException("Application", "id", id));
 
-                    // 1. Look for existing MongoDB ATS document created for this candidate & job (e.g. if saved with null applicationId)
+                    // 1. Look for existing MongoDB ATS document created for this candidate & job
+                    // (e.g. if saved with null applicationId)
                     if (app.getCandidateEmail() != null && app.getJob() != null) {
-                        List<AtsAnalysisDocument> existingList =
-                                atsResumeAnalyzerService.getAnalysisByCandidateEmail(app.getCandidateEmail());
+                        List<AtsAnalysisDocument> existingList = atsResumeAnalyzerService
+                                .getAnalysisByCandidateEmail(app.getCandidateEmail());
                         for (AtsAnalysisDocument existing : existingList) {
                             if (existing.getJobId() != null && existing.getJobId().equals(app.getJob().getId())) {
                                 existing.setApplicationId(id);
@@ -154,8 +161,10 @@ public class ApplicationController {
                         }
                     }
 
-                    // 2. On-demand evaluation & persistence in MongoDB for legacy or existing applications
-                    AtsAnalysisDocument generated = atsResumeAnalyzerService.analyzeAndSave(app, app.getJob(), app.getResume());
+                    // 2. On-demand evaluation & persistence in MongoDB for legacy or existing
+                    // applications
+                    AtsAnalysisDocument generated = atsResumeAnalyzerService.analyzeAndSave(app, app.getJob(),
+                            app.getResume());
                     if (generated != null && app.getAtsScore() == null) {
                         app.setAtsScore(generated.getAtsScore());
                         app.setAtsMatchTier(generated.getMatchTier());
@@ -164,6 +173,16 @@ public class ApplicationController {
                     return generated;
                 });
         return ResponseEntity.ok(ApiResponse.ok("ATS analysis retrieved successfully", doc));
+    }
+
+    @GetMapping("/{id}/constructive-feedback")
+    @PreAuthorize("hasAnyRole('JOB_SEEKER', 'RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN')")
+    @Operation(summary = "Get constructive feedback and skill gap analysis for an application", description = "Delivers positive, growth-oriented feedback with identified strengths, critical skill gaps, and recommended action steps.")
+    public ResponseEntity<ApiResponse<ConstructiveFeedbackResponse>> getConstructiveFeedback(
+            @PathVariable Long id,
+            Authentication authentication) {
+        ConstructiveFeedbackResponse feedback = applicationService.getConstructiveFeedback(id, getAuthenticatedEmail(authentication));
+        return ResponseEntity.ok(ApiResponse.ok("Constructive feedback retrieved successfully", feedback));
     }
 
     @PostMapping(value = "/analyze-ats", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -208,7 +227,8 @@ public class ApplicationController {
                     resumeText = primary.get().getParsedText();
                     fileName = primary.get().getFileName();
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         AtsAnalysisDocument analysis;
@@ -245,9 +265,9 @@ public class ApplicationController {
         byte[] bytes = doc.getFileData() != null ? doc.getFileData() : new byte[0];
 
         return ResponseEntity.ok()
-                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + fileName + "\"")
                 .contentType(org.springframework.http.MediaType.parseMediaType(contentType))
                 .body(bytes);
     }
 }
-

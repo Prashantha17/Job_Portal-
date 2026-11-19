@@ -6,7 +6,8 @@ import {
   MapPin, Clock,
   History, CheckCircle2, Send, Filter,
   Calendar, Video, Star, ExternalLink,
-  BarChart3, Sparkles, Eye, RefreshCw, User, Download
+  BarChart3, Sparkles, Eye, RefreshCw, User, Download,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import profileService, { RecruiterProfile, UpdateRecruiterProfilePayload, downloadResumeFile } from '../services/profileService';
@@ -37,6 +38,7 @@ import { CandidateMatch, MatchBreakdown } from '../types/matching';
 import { MatchBreakdownModal } from '../components/matching/MatchBreakdownModal';
 import { CandidateProfileModal } from '../components/candidate/CandidateProfileModal';
 import { AtsAnalysisReportModal } from '../components/ats/AtsAnalysisReportModal';
+import { DirectChatModal } from '../components/chat/DirectChatModal';
 
 interface RecruiterDashboardProps {
   onBackToHome?: () => void;
@@ -268,6 +270,9 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
     applicationNote?: string;
     application?: ApplicationResponse;
   } | null>(null);
+
+  // Phase A: Direct Chat Modal state
+  const [activeDirectChatApp, setActiveDirectChatApp] = useState<ApplicationResponse | null>(null);
 
   // Interview Management State & Handlers
   const [recruiterInterviews, setRecruiterInterviews] = useState<InterviewResponse[]>([]);
@@ -649,10 +654,11 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <Button
             variant="outline"
             size="sm"
+            className="flex-1 sm:flex-initial text-xs sm:text-sm justify-center"
             leftIcon={<Edit3 className="w-3.5 h-3.5 text-brand-600" />}
             onClick={() => setIsEditModalOpen(true)}
           >
@@ -661,6 +667,7 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
           <Button
             variant="primary"
             size="sm"
+            className="flex-1 sm:flex-initial text-xs sm:text-sm justify-center"
             leftIcon={<Plus className="w-3.5 h-3.5" />}
             onClick={() => setIsPostJobModalOpen(true)}
           >
@@ -670,19 +677,19 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
       </div>
 
       {/* Recruiter Hero Identity Card */}
-      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-indigo-950/20 mb-8 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-2xl sm:rounded-3xl p-5 sm:p-8 text-white shadow-xl shadow-indigo-950/20 mb-6 sm:mb-8 relative overflow-hidden">
         <div className="absolute right-0 top-0 -mt-10 -mr-10 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
-          <div className="flex items-center gap-5">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-tr from-brand-500 to-indigo-500 p-1 shadow-lg shrink-0">
+        <div className="flex flex-col md:flex-row items-center md:items-center justify-between gap-6 relative z-10">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-6 w-full md:w-auto">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-tr from-brand-500 to-indigo-500 p-1 shadow-lg shrink-0 mx-auto sm:mx-0">
               <div className="w-full h-full bg-slate-900 rounded-xl flex items-center justify-center text-white font-extrabold text-2xl sm:text-3xl uppercase">
                 <Building2 className="w-10 h-10 text-brand-400" />
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center gap-3 flex-wrap">
+            <div className="w-full">
+              <div className="flex items-center justify-center sm:justify-start gap-2.5 flex-wrap">
                 <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
                   {profile.fullName}
                 </h2>
@@ -693,18 +700,18 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
                 )}
               </div>
 
-              <p className="text-indigo-200 text-sm font-medium mt-1">
+              <p className="text-indigo-200 text-xs sm:text-sm font-medium mt-1">
                 {profile.designation} • <span className="text-white font-bold">{profile.companyName}</span>
                 {profile.department && ` (${profile.department})`}
               </p>
 
-              <div className="flex items-center gap-4 text-xs text-indigo-300/80 mt-3 flex-wrap">
+              <div className="flex items-center justify-center sm:justify-start gap-2.5 sm:gap-4 text-xs text-indigo-300/80 mt-3 flex-wrap">
                 <span className="flex items-center gap-1">
-                  <Mail className="w-3.5 h-3.5 text-brand-300" /> {profile.corporateEmail || profile.email}
+                  <Mail className="w-3.5 h-3.5 text-brand-300 shrink-0" /> {profile.corporateEmail || profile.email}
                 </span>
                 {profile.corporatePhone && (
                   <span className="flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-brand-300" /> {profile.corporatePhone}
+                    <Phone className="w-3.5 h-3.5 text-brand-300 shrink-0" /> {profile.corporatePhone}
                   </span>
                 )}
                 {profile.linkedinUrl && (
@@ -714,19 +721,19 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
                     rel="noreferrer"
                     className="flex items-center gap-1 text-brand-300 hover:text-white underline transition-colors"
                   >
-                    <Linkedin className="w-3.5 h-3.5" /> LinkedIn Profile
+                    <Linkedin className="w-3.5 h-3.5 shrink-0" /> LinkedIn Profile
                   </a>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="w-full md:w-auto flex md:flex-col gap-3">
-            <span className="bg-white/10 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-2 border border-white/10">
-              <Building2 className="w-4 h-4 text-brand-400" /> Organization: {profile.companyName}
+          <div className="w-full md:w-auto flex flex-col sm:flex-row md:flex-col gap-2.5">
+            <span className="bg-white/10 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center justify-center sm:justify-start gap-2 border border-white/10">
+              <Building2 className="w-4 h-4 text-brand-400 shrink-0" /> Organization: {profile.companyName}
             </span>
-            <span className="bg-white/10 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-2 border border-white/10">
-              <Award className="w-4 h-4 text-indigo-400" /> Talent Partner Account
+            <span className="bg-white/10 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-200 flex items-center justify-center sm:justify-start gap-2 border border-white/10">
+              <Award className="w-4 h-4 text-indigo-400 shrink-0" /> Talent Partner Account
             </span>
           </div>
         </div>
@@ -802,10 +809,10 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
       )}
 
       {/* SECTION TABS: VACANCIES vs INTERVIEWS vs ANALYTICS */}
-      <div className="flex items-center gap-2 border-b border-slate-200 mb-6 overflow-x-auto">
+      <div className="flex items-center gap-1 sm:gap-2 border-b border-slate-200 mb-6 overflow-x-auto no-scrollbar scroll-smooth -mb-px flex-nowrap py-1">
         <button
           onClick={() => setActiveViewTab('vacancies')}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+          className={`shrink-0 py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeViewTab === 'vacancies'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -818,7 +825,7 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
             setActiveViewTab('interviews');
             fetchRecruiterInterviews();
           }}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+          className={`shrink-0 py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeViewTab === 'interviews'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -828,7 +835,7 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
         </button>
         <button
           onClick={() => setActiveViewTab('analytics')}
-          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+          className={`shrink-0 py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeViewTab === 'analytics'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -1747,10 +1754,19 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
                                   applicationNote: app.coverLetter,
                                   application: app,
                                 })}
-                                className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl transition-all border border-brand-200"
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl transition-all border border-brand-200 cursor-pointer"
                               >
                                 <User className="w-3.5 h-3.5 text-brand-600" />
                                 View Full Profile
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setActiveDirectChatApp(app)}
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition-all border border-indigo-200 cursor-pointer shadow-2xs"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                                Chat
                               </button>
 
                               <button
@@ -1974,7 +1990,29 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
               }
             : undefined
         }
+        onDirectChat={
+          selectedCandidateForProfileModal?.application
+            ? () => {
+                const targetApp = selectedCandidateForProfileModal.application!;
+                setSelectedCandidateForProfileModal(null);
+                setActiveDirectChatApp(targetApp);
+              }
+            : undefined
+        }
       />
+
+      {/* MODAL: DIRECT CHAT WITH CANDIDATE */}
+      {activeDirectChatApp && (
+        <DirectChatModal
+          isOpen={Boolean(activeDirectChatApp)}
+          onClose={() => setActiveDirectChatApp(null)}
+          applicationId={activeDirectChatApp.id}
+          jobTitle={activeDirectChatApp.jobTitle}
+          companyName={profile?.companyName || 'Hiring Team'}
+          counterpartName={activeDirectChatApp.candidateName || 'Candidate'}
+          currentUserEmail={user?.email || ''}
+        />
+      )}
 
       {/* MODAL: ADVANCE CANDIDATE STAGE WITH REMARKS & REAL GMAIL DISPATCH */}
       {transitionModalApp && (

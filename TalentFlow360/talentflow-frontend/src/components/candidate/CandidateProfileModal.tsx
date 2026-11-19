@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, AlertCircle, Calendar, Mail, Phone, Sparkles, Download } from 'lucide-react';
+import { X, User, AlertCircle, Calendar, Mail, Phone, Sparkles, Download, MessageSquare } from 'lucide-react';
 import { CandidateProfile, profileService, downloadResumeFile } from '../../services/profileService';
 import { ApplicationResponse } from '../../types/application';
 import { CandidateProfileFullView } from './CandidateProfileFullView';
@@ -14,6 +14,7 @@ interface CandidateProfileModalProps {
   applicationNote?: string;
   application?: ApplicationResponse;
   onScheduleInterview?: () => void;
+  onDirectChat?: () => void;
 }
 
 export const CandidateProfileModal: React.FC<CandidateProfileModalProps> = ({
@@ -26,6 +27,7 @@ export const CandidateProfileModal: React.FC<CandidateProfileModalProps> = ({
   applicationNote,
   application,
   onScheduleInterview,
+  onDirectChat,
 }) => {
   const [profile, setProfile] = useState<CandidateProfile | null>(initialProfile || null);
   const [loading, setLoading] = useState(false);
@@ -148,6 +150,18 @@ export const CandidateProfileModal: React.FC<CandidateProfileModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {onDirectChat && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onDirectChat();
+                }}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-indigo-600" /> Direct Chat
+              </button>
+            )}
             {onScheduleInterview && (
               <button
                 type="button"
@@ -239,6 +253,19 @@ export const CandidateProfileModal: React.FC<CandidateProfileModalProps> = ({
                   <Mail className="w-3.5 h-3.5 text-slate-500" />
                   Reach Out
                 </a>
+              )}
+              {onDirectChat && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onDirectChat();
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                  Direct Chat
+                </button>
               )}
               {onScheduleInterview && (
                 <button
