@@ -19,8 +19,10 @@ yarn-error.log*
 *.user
 
 # Environment & Temp
-.env
-.env.local
+**/.env
+**/.env.local
+**/.env.*.local
+!**/.env.example
 *.log
 tmp/
 

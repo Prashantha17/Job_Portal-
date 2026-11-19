@@ -78,7 +78,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/skills/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/jobs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/companies/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/candidates/resumes/**", "/api/v1/applications/*/resume/download").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/candidates/resumes/**", "/api/v1/applications/*/resume/download", "/api/v1/applications/*/offer-letter/download").permitAll()
 
                         // Role-specific endpoint rules
                         .requestMatchers("/api/v1/admin/**").hasRole("SUPER_ADMIN")

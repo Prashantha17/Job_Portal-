@@ -7,6 +7,7 @@ import com.talentflow.backend.dto.application.ApplicationResponse;
 import com.talentflow.backend.dto.application.ApplicationStatusHistoryResponse;
 import com.talentflow.backend.dto.application.ApplyJobRequest;
 import com.talentflow.backend.dto.application.ConstructiveFeedbackResponse;
+import com.talentflow.backend.dto.application.SendOfferLetterRequest;
 import com.talentflow.backend.dto.application.UpdateApplicationStatusRequest;
 import com.talentflow.backend.entity.Application;
 import com.talentflow.backend.entity.CandidateProfile;
@@ -269,5 +270,61 @@ public class ApplicationController {
                         "attachment; filename=\"" + fileName + "\"")
                 .contentType(org.springframework.http.MediaType.parseMediaType(contentType))
                 .body(bytes);
+    }
+
+    @PostMapping("/{id}/offer-letter/send")
+    @PreAuthorize("hasAnyRole('RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN')")
+    @Operation(summary = "Approve & Send official offer letter email with PDF", description = "Compiles the signed offer letter PDF, updates status to OFFER_RELEASED or HIRED, and dispatches the PDF and congratulatory email to candidate.")
+    public ResponseEntity<ApiResponse<ApplicationResponse>> sendOfferLetter(
+            @PathVariable Long id,
+            @Valid @RequestBody SendOfferLetterRequest request,
+            Authentication authentication) {
+        String actorEmail = getAuthenticatedEmail(authentication);
+        ApplicationResponse response = applicationService.sendOfferLetter(id, request, actorEmail);
+        return ResponseEntity.ok(ApiResponse.ok("Offer letter generated and successfully emailed to candidate", response));
+    }
+
+    @PostMapping("/{id}/offer-letter/preview-pdf")
+    @PreAuthorize("hasAnyRole('RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN')")
+    @Operation(summary = "Preview official offer letter PDF", description = "Compiles raw PDF stream in real-time based on edited offer details for recruiter review before dispatching.")
+    public ResponseEntity<byte[]> previewOfferLetterPdf(
+            @PathVariable Long id,
+            @RequestBody SendOfferLetterRequest request) {
+        byte[] pdfBytes = applicationService.generateOfferLetterPreviewPdf(id, request);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"Offer_Letter_Preview.pdf\"")
+                .body(pdfBytes);
+    }
+
+    @GetMapping("/{id}/offer-letter/download")
+    @Operation(summary = "Download official offer letter PDF", description = "Streams the archived official Offer Letter PDF for this candidate/recruiter.")
+    public ResponseEntity<byte[]> downloadOfferLetter(@PathVariable Long id) {
+        byte[] pdfBytes = applicationService.getOfferLetterPdfBytes(id);
+        String fileName = "Offer_Letter_Application_" + id + ".pdf";
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .body(pdfBytes);
+    }
+
+    @DeleteMapping("/{id}/withdraw")
+    @PreAuthorize("hasAnyRole('JOB_SEEKER', 'SUPER_ADMIN')")
+    @Operation(summary = "Withdraw application", description = "Allows candidate to withdraw their application at any stage except after HIRED. Permanently removes the application from both candidate and recruiter portals.")
+    public ResponseEntity<ApiResponse<Void>> withdrawApplication(
+            @PathVariable Long id,
+            Authentication authentication) {
+        applicationService.withdrawApplication(id, getAuthenticatedEmail(authentication));
+        return ResponseEntity.ok(ApiResponse.ok("Application withdrawn and permanently deleted successfully.", null));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('JOB_SEEKER', 'SUPER_ADMIN')")
+    @Operation(summary = "Delete / Withdraw application", description = "Deletes and withdraws the application.")
+    public ResponseEntity<ApiResponse<Void>> deleteApplication(
+            @PathVariable Long id,
+            Authentication authentication) {
+        applicationService.withdrawApplication(id, getAuthenticatedEmail(authentication));
+        return ResponseEntity.ok(ApiResponse.ok("Application withdrawn and permanently deleted successfully.", null));
     }
 }

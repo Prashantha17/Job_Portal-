@@ -60,6 +60,15 @@ public class Application {
     @Column(name = "ats_match_tier", length = 50)
     private String atsMatchTier;
 
+    @Column(name = "offer_letter_file_path", length = 500)
+    private String offerLetterFilePath;
+
+    @Column(name = "offered_salary_lpa")
+    private Double offeredSalaryLpa;
+
+    @Column(name = "offer_joining_date", length = 60)
+    private String offerJoiningDate;
+
     @Column(name = "applied_at", nullable = false, updatable = false)
     private Instant appliedAt = Instant.now();
 
@@ -139,5 +148,14 @@ public class Application {
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getOfferLetterFilePath() { return offerLetterFilePath; }
+    public void setOfferLetterFilePath(String offerLetterFilePath) { this.offerLetterFilePath = offerLetterFilePath; }
+
+    public Double getOfferedSalaryLpa() { return offeredSalaryLpa; }
+    public void setOfferedSalaryLpa(Double offeredSalaryLpa) { this.offeredSalaryLpa = offeredSalaryLpa; }
+
+    public String getOfferJoiningDate() { return offerJoiningDate; }
+    public void setOfferJoiningDate(String offerJoiningDate) { this.offerJoiningDate = offerJoiningDate; }
 }
 

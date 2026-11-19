@@ -7,7 +7,7 @@ import {
   History, CheckCircle2, Send, Filter,
   Calendar, Video, Star, ExternalLink,
   BarChart3, Sparkles, Eye, RefreshCw, User, Download,
-  MessageSquare
+  MessageSquare, FileCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import profileService, { RecruiterProfile, UpdateRecruiterProfilePayload, downloadResumeFile } from '../services/profileService';
@@ -39,6 +39,7 @@ import { MatchBreakdownModal } from '../components/matching/MatchBreakdownModal'
 import { CandidateProfileModal } from '../components/candidate/CandidateProfileModal';
 import { AtsAnalysisReportModal } from '../components/ats/AtsAnalysisReportModal';
 import { DirectChatModal } from '../components/chat/DirectChatModal';
+import { OfferLetterModal } from '../components/recruiter/OfferLetterModal';
 
 interface RecruiterDashboardProps {
   onBackToHome?: () => void;
@@ -425,6 +426,24 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
   const [historyItems, setHistoryItems] = useState<ApplicationStatusHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // Offer Letter Modal State
+  const [offerLetterModalApp, setOfferLetterModalApp] = useState<ApplicationResponse | null>(null);
+
+  const handleOpenOfferLetterModal = (app: ApplicationResponse) => {
+    setOfferLetterModalApp(app);
+  };
+
+  const handleOfferLetterSuccess = async (updatedApp: ApplicationResponse) => {
+    setTransitionNotificationMsg(
+      `🎉 Formal Offer Letter with PDF successfully emailed to ${updatedApp.candidateName || 'Candidate'}! Application is now ${updatedApp.status}.`
+    );
+    setTimeout(() => setTransitionNotificationMsg(null), 8000);
+    if (selectedJobForApplicants) {
+      const refreshed = await applicationService.getJobApplications(selectedJobForApplicants.id);
+      setApplicants(refreshed || []);
+    }
+  };
+
   // ATS Analysis Report Modal State
   const [selectedAtsReport, setSelectedAtsReport] = useState<AtsAnalysisReport | null>(null);
   const [loadingAtsReport, setLoadingAtsReport] = useState(false);
@@ -504,6 +523,10 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
   };
 
   const openTransitionModal = (app: ApplicationResponse, targetStatus?: ApplicationStatus) => {
+    if (targetStatus === 'OFFER_RELEASED' || targetStatus === 'HIRED') {
+      setOfferLetterModalApp(app);
+      return;
+    }
     setTransitionModalApp(app);
     setTransitionNewStatus(targetStatus || app.status);
     setTransitionRemarks('');
@@ -1591,226 +1614,284 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
                     const matchInfo = applicantMatchesMap.get(app.id) || ((app as any).candidateProfileId ? applicantMatchesMap.get((app as any).candidateProfileId) : undefined);
 
                     return (
-                      <Card key={app.id} className="p-5 border border-slate-200/90 hover:border-brand-300 transition-colors">
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                          {/* Candidate Bio & Details */}
-                          <div className="space-y-2 flex-1">
-                            <div className="flex items-center gap-2.5 flex-wrap">
-                              <h4 className="font-bold text-slate-900 text-base">{candidateName}</h4>
-                              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${stageBadge.bg}`}>
-                                {stageBadge.label}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">App #{app.id}</span>
-                              {app.atsScore != null && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenAtsReport(app)}
-                                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-black border transition-all flex items-center gap-1 cursor-pointer shadow-sm ${
-                                    app.atsScore >= 80
-                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                                      : app.atsScore >= 60
-                                      ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
-                                      : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
-                                  }`}
-                                  title="Click to view AI ATS Resume Analysis Report"
-                                >
-                                  <Sparkles className="w-3 h-3 text-brand-600" />
-                                  ATS: {app.atsScore}%
-                                </button>
-                              )}
-                              {matchInfo && (
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveBreakdownModal({
-                                    title: candidateName,
-                                    subtitle: `${app.candidateEmail} • Application #${app.id}`,
-                                    breakdown: matchInfo.breakdown
-                                  })}
-                                  className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-sm hover:scale-105 transition-all flex items-center gap-1 cursor-pointer"
-                                  title="Click to view AI Match Breakdown"
-                                >
-                                  <Sparkles className="w-3 h-3 text-amber-300" />
-                                  {matchInfo.matchScore}% Match
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-3.5 text-xs text-slate-500">
-                              <span className="flex items-center gap-1 text-slate-700 font-medium">
-                                <Mail className="w-3.5 h-3.5 text-slate-400" />
-                                {app.candidateEmail}
-                              </span>
-                              {app.candidatePhone && (
-                                <span className="flex items-center gap-1">
-                                  <Phone className="w-3.5 h-3.5 text-slate-400" />
-                                  {app.candidatePhone}
-                                </span>
-                              )}
-                              <span className="flex items-center gap-1 text-slate-400">
-                                <Clock className="w-3.5 h-3.5" />
-                                Applied on {new Date(app.appliedAt).toLocaleDateString()}
-                              </span>
-                            </div>
-
-                            {/* Indian CTC compensation details */}
-                            {(app.currentCtcLpa || app.expectedCtcLpa) && (
-                              <div className="flex items-center gap-4 text-xs font-semibold text-slate-700">
-                                {app.currentCtcLpa && (
-                                  <span>Current CTC: <span className="text-slate-900 font-bold">₹{app.currentCtcLpa} LPA</span></span>
-                                )}
-                                {app.expectedCtcLpa && (
-                                  <span>Expected CTC: <span className="text-brand-600 font-bold">₹{app.expectedCtcLpa} LPA</span></span>
-                                )}
-                              </div>
+                      <Card key={app.id} className="p-4 sm:p-5 border border-slate-200/90 hover:border-brand-300 hover:shadow-md transition-all">
+                        {/* 1. Header: Candidate Info & Stage Selector */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                          {/* Left: Name, Badges, Match Score, ATS Score */}
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <h4 className="font-bold text-slate-900 text-base">{candidateName}</h4>
+                            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${stageBadge.bg}`}>
+                              {stageBadge.label}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono">App #{app.id}</span>
+                            {app.atsScore != null && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAtsReport(app)}
+                                className={`px-2.5 py-0.5 rounded-full text-[11px] font-black border transition-all flex items-center gap-1 cursor-pointer shadow-2xs ${
+                                  app.atsScore >= 80
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                    : app.atsScore >= 60
+                                    ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
+                                    : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                }`}
+                                title="Click to view AI ATS Resume Analysis Report"
+                              >
+                                <Sparkles className="w-3 h-3 text-brand-600" />
+                                ATS: {app.atsScore}%
+                              </button>
                             )}
-
-                            {app.coverLetter && (
-                              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 text-xs text-slate-600">
-                                <strong className="text-slate-800 block mb-0.5">Application Note / Cover Letter:</strong>
-                                <p className="line-clamp-2 leading-relaxed">{app.coverLetter}</p>
-                              </div>
-                            )}
-
-                            {/* Scheduled Interview Banner on Candidate Card */}
-                            {latestInterview && (
-                              <div className="p-3 bg-gradient-to-r from-brand-50/70 to-indigo-50/70 rounded-xl border border-brand-200/80 text-xs space-y-2">
-                                <div className="flex items-center justify-between flex-wrap gap-2">
-                                  <div className="flex items-center gap-1.5 font-bold text-brand-900">
-                                    <Video className="w-3.5 h-3.5 text-brand-600" />
-                                    <span>{latestInterview.roundName}</span>
-                                    <span className="font-normal text-slate-500">• {new Date(latestInterview.scheduledStartTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })} IST</span>
-                                  </div>
-                                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                                    latestInterview.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
-                                    latestInterview.status === 'RESCHEDULE_REQUESTED' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
-                                    latestInterview.status === 'COMPLETED' ? 'bg-purple-100 text-purple-800 border border-purple-300' :
-                                    'bg-blue-100 text-blue-800 border border-blue-300'
-                                  }`}>
-                                    {latestInterview.status.replace(/_/g, ' ')}
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-2 flex-wrap pt-1">
-                                  {latestInterview.meetingLink && latestInterview.status !== 'CANCELLED' && (
-                                    <a
-                                      href={latestInterview.meetingLink}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-bold text-[11px] transition-colors"
-                                    >
-                                      <Video className="w-3 h-3" /> Join Room <ExternalLink className="w-2.5 h-2.5" />
-                                    </a>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenFeedbackModal(latestInterview)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-[11px] transition-colors"
-                                  >
-                                    <Star className="w-3 h-3" /> {latestInterview.status === 'COMPLETED' ? 'View/Update Scorecard' : 'Submit Scorecard'}
-                                  </button>
-                                  {latestInterview.overallRating != null && (
-                                    <span className="text-[11px] font-bold text-purple-900 bg-purple-100 px-2 py-0.5 rounded-lg border border-purple-200">
-                                      Score: ★ {latestInterview.overallRating}/5
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                            {matchInfo && (
+                              <button
+                                type="button"
+                                onClick={() => setActiveBreakdownModal({
+                                  title: candidateName,
+                                  subtitle: `${app.candidateEmail} • Application #${app.id}`,
+                                  breakdown: matchInfo.breakdown
+                                })}
+                                className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-2xs hover:scale-105 transition-all flex items-center gap-1 cursor-pointer"
+                                title="Click to view AI Match Breakdown"
+                              >
+                                <Sparkles className="w-3 h-3 text-amber-300" />
+                                {matchInfo.matchScore}% Match
+                              </button>
                             )}
                           </div>
 
-                          {/* Recruiter Actions: Stage Select, History, Resume */}
-                          <div className="shrink-0 flex flex-wrap lg:flex-col items-start lg:items-end gap-2.5 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-                            {/* Stage advance button / dropdown */}
-                            <div className="flex items-center gap-2">
-                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider lg:hidden">
-                                Stage:
-                              </label>
-                              <select
-                                value={app.status}
-                                disabled={updatingStatusId === app.id}
-                                onChange={(e) => openTransitionModal(app, e.target.value as ApplicationStatus)}
-                                className="text-xs font-bold px-3 py-1.5 rounded-xl border border-brand-300 bg-brand-50/50 text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer disabled:opacity-50"
-                              >
-                                <option value="APPLIED">1. Applied</option>
-                                <option value="UNDER_REVIEW">2. Under Review</option>
-                                <option value="SHORTLISTED">3. Shortlisted</option>
-                                <option value="TECH_INTERVIEW">4. Tech Round</option>
-                                <option value="HR_INTERVIEW">5. HR Round</option>
-                                <option value="SELECTED">6. Selected</option>
-                                <option value="OFFER_RELEASED">7. Offer Released</option>
-                                <option value="HIRED">8. Hired</option>
-                                <option value="REJECTED">9. Rejected</option>
-                                <option value="WITHDRAWN">10. Withdrawn</option>
-                              </select>
-                            </div>
+                          {/* Right: Stage Advance Selector Dropdown */}
+                          <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                              Stage:
+                            </label>
+                            <select
+                              value={app.status}
+                              disabled={updatingStatusId === app.id}
+                              onChange={(e) => openTransitionModal(app, e.target.value as ApplicationStatus)}
+                              className="text-xs font-bold px-3 py-1.5 rounded-xl border border-brand-300 bg-brand-50/70 text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer disabled:opacity-50 shadow-2xs"
+                            >
+                              <option value="APPLIED">1. Applied</option>
+                              <option value="UNDER_REVIEW">2. Under Review</option>
+                              <option value="SHORTLISTED">3. Shortlisted</option>
+                              <option value="TECH_INTERVIEW">4. Tech Round</option>
+                              <option value="HR_INTERVIEW">5. HR Round</option>
+                              <option value="SELECTED">6. Selected</option>
+                              <option value="OFFER_RELEASED">7. Offer Released</option>
+                              <option value="HIRED">8. Hired</option>
+                              <option value="REJECTED">9. Rejected</option>
+                              <option value="WITHDRAWN">10. Withdrawn</option>
+                            </select>
+                          </div>
+                        </div>
 
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedCandidateForProfileModal({
-                                  candidateProfileId: app.candidateProfileId,
-                                  email: app.candidateEmail,
-                                  name: app.candidateName,
-                                  applicationNote: app.coverLetter,
-                                  application: app,
-                                })}
-                                className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl transition-all border border-brand-200 cursor-pointer"
-                              >
-                                <User className="w-3.5 h-3.5 text-brand-600" />
-                                View Full Profile
-                              </button>
+                        {/* 2. Body: Candidate Details, CTC, Cover Letter, Interviews, Offer Banner */}
+                        <div className="py-3 space-y-2.5">
+                          <div className="flex flex-wrap items-center gap-3.5 sm:gap-5 text-xs text-slate-500">
+                            <span className="flex items-center gap-1 text-slate-700 font-medium">
+                              <Mail className="w-3.5 h-3.5 text-slate-400" />
+                              {app.candidateEmail}
+                            </span>
+                            {app.candidatePhone && (
+                              <span className="flex items-center gap-1">
+                                <Phone className="w-3.5 h-3.5 text-slate-400" />
+                                {app.candidatePhone}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1 text-slate-400">
+                              <Clock className="w-3.5 h-3.5" />
+                              Applied on {new Date(app.appliedAt).toLocaleDateString()}
+                            </span>
+                          </div>
 
-                              <button
-                                type="button"
-                                onClick={() => setActiveDirectChatApp(app)}
-                                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition-all border border-indigo-200 cursor-pointer shadow-2xs"
-                              >
-                                <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
-                                Chat
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleOpenScheduleModal(app)}
-                                className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 px-3 py-1.5 rounded-xl transition-all shadow-sm shadow-brand-500/20"
-                              >
-                                <Calendar className="w-3.5 h-3.5" />
-                                Schedule Round
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleViewHistory(app)}
-                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-brand-700 bg-slate-100 hover:bg-brand-50 px-3 py-1.5 rounded-xl transition-colors"
-                              >
-                                <History className="w-3.5 h-3.5 text-brand-600" />
-                                Audit Trail
-                              </button>
-
-                              {app.atsScore != null && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenAtsReport(app)}
-                                  className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl transition-all border border-brand-200"
-                                  title="View AI ATS Score breakdown"
-                                >
-                                  <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-                                  ATS Analysis ({app.atsScore}%)
-                                </button>
+                          {/* Indian CTC compensation details */}
+                          {(app.currentCtcLpa || app.expectedCtcLpa) && (
+                            <div className="flex items-center gap-4 text-xs font-semibold text-slate-700">
+                              {app.currentCtcLpa && (
+                                <span>Current CTC: <span className="text-slate-900 font-bold">₹{app.currentCtcLpa} LPA</span></span>
                               )}
-
-                              {app.resumeUrl && (
-                                <button
-                                  type="button"
-                                  onClick={() => downloadResumeFile(app.resumeUrl!, app.resumeTitle || `${app.candidateName.replace(/\s+/g, '_')}_Resume.pdf`)}
-                                  className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl transition-colors border border-brand-200/80 cursor-pointer shadow-2xs"
-                                  title="Download candidate resume document"
-                                >
-                                  <Download className="w-3.5 h-3.5 text-brand-600" />
-                                  <span>Resume</span>
-                                </button>
+                              {app.expectedCtcLpa && (
+                                <span>Expected CTC: <span className="text-brand-600 font-bold">₹{app.expectedCtcLpa} LPA</span></span>
                               )}
                             </div>
+                          )}
+
+                          {app.coverLetter && (
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 text-xs text-slate-600">
+                              <strong className="text-slate-800 block mb-0.5">Application Note / Cover Letter:</strong>
+                              <p className="line-clamp-2 leading-relaxed">{app.coverLetter}</p>
+                            </div>
+                          )}
+
+                          {/* Scheduled Interview Banner on Candidate Card */}
+                          {latestInterview && (
+                            <div className="p-3 bg-gradient-to-r from-brand-50/70 to-indigo-50/70 rounded-xl border border-brand-200/80 text-xs space-y-2">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-1.5 font-bold text-brand-900">
+                                  <Video className="w-3.5 h-3.5 text-brand-600" />
+                                  <span>{latestInterview.roundName}</span>
+                                  <span className="font-normal text-slate-500">• {new Date(latestInterview.scheduledStartTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })} IST</span>
+                                </div>
+                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                  latestInterview.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                                  latestInterview.status === 'RESCHEDULE_REQUESTED' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                                  latestInterview.status === 'COMPLETED' ? 'bg-purple-100 text-purple-800 border border-purple-300' :
+                                  'bg-blue-100 text-blue-800 border border-blue-300'
+                                }`}>
+                                  {latestInterview.status.replace(/_/g, ' ')}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 flex-wrap pt-1">
+                                {latestInterview.meetingLink && latestInterview.status !== 'CANCELLED' && (
+                                  <a
+                                    href={latestInterview.meetingLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-bold text-[11px] transition-colors"
+                                  >
+                                    <Video className="w-3 h-3" /> Join Room <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenFeedbackModal(latestInterview)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-[11px] transition-colors"
+                                >
+                                  <Star className="w-3 h-3" /> {latestInterview.status === 'COMPLETED' ? 'View/Update Scorecard' : 'Submit Scorecard'}
+                                </button>
+                                {latestInterview.overallRating != null && (
+                                  <span className="text-[11px] font-bold text-purple-900 bg-purple-100 px-2 py-0.5 rounded-lg border border-purple-200">
+                                    Score: ★ {latestInterview.overallRating}/5
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Formal Offer Released Callout Banner */}
+                          {(app.status === 'OFFER_RELEASED' || app.status === 'HIRED' || app.offerLetterFilePath) && (
+                            <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200/90 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                                  <FileCheck className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <p className="font-extrabold text-emerald-950">
+                                    Formal Offer Released {app.offeredSalaryLpa ? `• ₹ ${app.offeredSalaryLpa.toFixed(2)} LPA` : ''}
+                                  </p>
+                                  <p className="text-[11px] text-emerald-700">
+                                    {app.offerJoiningDate ? `Proposed Joining: ${app.offerJoiningDate}` : 'Official Offer Letter Generated'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => applicationService.downloadOfferLetter(app.id, `Offer_Letter_${app.candidateName.replace(/\s+/g, '_')}.pdf`)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                                  title="Download official PDF offer letter"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  Download Offer PDF
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenOfferLetterModal(app)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-emerald-100 text-emerald-800 rounded-xl font-semibold text-xs border border-emerald-300 transition-colors cursor-pointer"
+                                  title="Review or resend customized offer letter"
+                                >
+                                  Edit / Resend
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 3. Bottom Action Toolbar */}
+                        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+                          {/* Primary Actions Group */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCandidateForProfileModal({
+                                candidateProfileId: app.candidateProfileId,
+                                email: app.candidateEmail,
+                                name: app.candidateName,
+                                applicationNote: app.coverLetter,
+                                application: app,
+                              })}
+                              className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl transition-all border border-brand-200 cursor-pointer shadow-2xs"
+                            >
+                              <User className="w-3.5 h-3.5 text-brand-600" />
+                              View Full Profile
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setActiveDirectChatApp(app)}
+                              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition-all border border-indigo-200 cursor-pointer shadow-2xs"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                              Chat
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenScheduleModal(app)}
+                              className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 px-3 py-1.5 rounded-xl transition-all shadow-sm shadow-brand-500/20"
+                            >
+                              <Calendar className="w-3.5 h-3.5" />
+                              Schedule Round
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenOfferLetterModal(app)}
+                              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition-all border border-emerald-300 cursor-pointer shadow-2xs"
+                              title="Generate, Preview and Send Official Offer Letter PDF"
+                            >
+                              <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>
+                                {app.status === 'OFFER_RELEASED' || app.status === 'HIRED' || app.offerLetterFilePath
+                                  ? 'Offer Letter (PDF)'
+                                  : 'Send Offer Letter'}
+                              </span>
+                            </button>
+                          </div>
+
+                          {/* Secondary Utilities & Audits */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => handleViewHistory(app)}
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-brand-700 bg-slate-100 hover:bg-brand-50 px-3 py-1.5 rounded-xl transition-colors shadow-2xs"
+                            >
+                              <History className="w-3.5 h-3.5 text-brand-600" />
+                              Audit Trail
+                            </button>
+
+                            {app.atsScore != null && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAtsReport(app)}
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl transition-all border border-brand-200 shadow-2xs"
+                                title="View AI ATS Score breakdown"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+                                ATS Breakdown
+                              </button>
+                            )}
+
+                            {app.resumeUrl && (
+                              <button
+                                type="button"
+                                onClick={() => downloadResumeFile(app.resumeUrl!, app.resumeTitle || `${app.candidateName.replace(/\s+/g, '_')}_Resume.pdf`)}
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl transition-colors border border-brand-200/80 cursor-pointer shadow-2xs"
+                                title="Download candidate resume document"
+                              >
+                                <Download className="w-3.5 h-3.5 text-brand-600" />
+                                <span>Resume</span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       </Card>
@@ -2544,6 +2625,14 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({ onBackTo
         loading={loadingAtsReport}
         onClose={() => setSelectedAtsReport(null)}
         jobTitle={atsReportJobTitle}
+      />
+
+      {/* ================= MODAL: OFFER LETTER GENERATOR & DISPATCHER ================= */}
+      <OfferLetterModal
+        isOpen={Boolean(offerLetterModalApp)}
+        onClose={() => setOfferLetterModalApp(null)}
+        application={offerLetterModalApp}
+        onSuccess={handleOfferLetterSuccess}
       />
     </div>
   );

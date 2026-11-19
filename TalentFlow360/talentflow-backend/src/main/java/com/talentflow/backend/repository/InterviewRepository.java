@@ -3,6 +3,9 @@ package com.talentflow.backend.repository;
 import com.talentflow.backend.entity.Interview;
 import com.talentflow.backend.entity.InterviewStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -25,5 +28,9 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
     long countByCandidateId(Long candidateId);
 
     long countByStatus(InterviewStatus status);
+
+    @Modifying
+    @Query("DELETE FROM Interview i WHERE i.application.id = :applicationId")
+    void deleteByApplicationId(@Param("applicationId") Long applicationId);
 }
 

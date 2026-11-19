@@ -39,6 +39,9 @@ export interface ApplicationResponse {
   notes?: string;
   atsScore?: number;
   atsMatchTier?: string;
+  offerLetterFilePath?: string;
+  offeredSalaryLpa?: number;
+  offerJoiningDate?: string;
   appliedAt: string;
   updatedAt: string;
 }
@@ -93,4 +96,21 @@ export interface ApplicationStatusHistoryItem {
   remarks?: string;
   changedAt: string;
 }
+
+export interface SendOfferLetterRequest {
+  candidateName: string;
+  candidateEmail?: string;
+  jobTitle: string;
+  companyName: string;
+  annualCtcLpa: number;
+  joiningDate: string;
+  jobLocation?: string;
+  reportingManager?: string;
+  acceptanceDeadline?: string;
+  customRemarks?: string;
+  signeeName?: string;
+  signeeTitle?: string;
+  markAsHired: boolean;
+}
+
 

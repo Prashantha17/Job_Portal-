@@ -12,4 +12,5 @@ public interface AtsAnalysisDocumentRepository extends MongoRepository<AtsAnalys
     Optional<AtsAnalysisDocument> findByApplicationId(Long applicationId);
     List<AtsAnalysisDocument> findByJobId(Long jobId);
     List<AtsAnalysisDocument> findByCandidateEmail(String candidateEmail);
+    void deleteByApplicationId(Long applicationId);
 }

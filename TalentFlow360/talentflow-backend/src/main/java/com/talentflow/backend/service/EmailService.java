@@ -38,6 +38,7 @@ public class EmailService {
         devOtpCache.put(email.toLowerCase().trim(), otp);
     }
 
+    @Async
     public void sendLoginOtpEmail(String toEmail, String otpCode) {
         storeDevOtp(toEmail, otpCode);
         String subject = "Your TalentFlow 360 Login OTP: " + otpCode;
@@ -70,6 +71,7 @@ public class EmailService {
         sendEmail(toEmail, subject, htmlContent);
     }
 
+    @Async
     public void sendRegistrationOtpEmail(String toEmail, String otpCode) {
         storeDevOtp(toEmail, otpCode);
         String subject = "Verify Your Email: TalentFlow 360 Registration Code - " + otpCode;
@@ -102,6 +104,7 @@ public class EmailService {
         sendEmail(toEmail, subject, htmlContent);
     }
 
+    @Async
     public void sendForgotPasswordOtpEmail(String toEmail, String otpCode) {
         storeDevOtp(toEmail, otpCode);
         String subject = "Reset Your TalentFlow 360 Password - Code: " + otpCode;
@@ -134,6 +137,7 @@ public class EmailService {
         sendEmail(toEmail, subject, htmlContent);
     }
 
+    @Async
     public void sendApplicationConfirmationEmail(String toEmail, String candidateName, String jobTitle, String companyName) {
         String subject = "Application Received: " + jobTitle + " at " + companyName + " - TalentFlow 360";
         String htmlContent = """
@@ -189,6 +193,7 @@ public class EmailService {
         sendEmail(toEmail, subject, htmlContent);
     }
 
+    @Async
     public void sendApplicationStatusUpdateEmail(String toEmail, String candidateName, String jobTitle,
                                                String companyName, String newStatus, String remarks) {
         String subject = "Status Update: Your application for " + jobTitle + " at " + companyName + " is now " + newStatus;
@@ -251,6 +256,7 @@ public class EmailService {
             .ofPattern("EEEE, dd MMMM yyyy 'at' hh:mm a (z)")
             .withZone(ZoneId.of("Asia/Kolkata"));
 
+    @Async
     public void sendInterviewInvitationEmail(Interview interview) {
         if (interview == null || interview.getCandidate() == null) return;
 
@@ -342,6 +348,7 @@ public class EmailService {
         }
     }
 
+    @Async
     public void sendInterviewStatusUpdateEmail(Interview interview, String updatedByRole) {
         if (interview == null || interview.getCandidate() == null) return;
 
@@ -391,6 +398,7 @@ public class EmailService {
         }
     }
 
+    @Async
     public void sendInterviewFeedbackEmail(Interview interview) {
         if (interview == null || interview.getCandidate() == null) return;
 
@@ -430,6 +438,7 @@ public class EmailService {
         sendEmail(candidateEmail, subject, htmlContent);
     }
 
+    @Async
     public void sendOfferLetterEmail(String toEmail, String candidateName, String jobTitle,
                                     String companyName, Double salaryLpa, String joiningDate, String remarks) {
         String subject = "Formal Offer of Employment: " + jobTitle + " at " + companyName + " 📜";
@@ -509,6 +518,7 @@ public class EmailService {
         sendEmail(toEmail, subject, htmlContent);
     }
 
+    @Async
     public void sendApplicationRejectionEmail(String toEmail, String candidateName, String jobTitle,
                                              String companyName, String remarks) {
         String subject = "Update regarding your application for " + jobTitle + " at " + companyName;
@@ -553,6 +563,7 @@ public class EmailService {
         sendEmail(toEmail, subject, htmlContent);
     }
 
+    @Async
     public void sendRecruiterNewApplicationEmail(String toEmail, String recruiterName, String candidateName,
                                                 String jobTitle, String companyName, Long applicationId) {
         String subject = "New Application Received: " + candidateName + " for " + jobTitle + " 📥";
@@ -604,6 +615,133 @@ public class EmailService {
             .replace("{{COMPANY_NAME}}", companyName);
 
         sendEmail(toEmail, subject, htmlContent);
+    }
+
+    @Async
+    public void sendOfferLetterWithPdfEmail(String toEmail, String candidateName, String jobTitle,
+                                           String companyName, Double salaryLpa, String joiningDate,
+                                           String remarks, byte[] pdfBytes, String pdfFileName) {
+        String subject = "Formal Offer of Employment: " + jobTitle + " at " + companyName + " 📜";
+        String salaryDisplay = salaryLpa != null && salaryLpa > 0
+                ? String.format("₹ %.2f LPA (INR Annual CTC)", salaryLpa)
+                : "Competitive (As per agreed compensation discussion)";
+        String dateDisplay = joiningDate != null && !joiningDate.isBlank()
+                ? joiningDate
+                : "Within standard notice period (30 days)";
+
+        String htmlContent = """
+            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);">
+                <div style="background: linear-gradient(135deg, #059669 0%, #047857 50%, #065f46 100%); padding: 36px 28px; text-align: center; color: #ffffff;">
+                    <span style="font-size: 40px; display: block; margin-bottom: 8px;">🎉</span>
+                    <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Congratulations, {{CANDIDATE_NAME}}!</h1>
+                    <p style="color: #d1fae5; margin: 8px 0 0 0; font-size: 14px; font-weight: 500;">Formal Offer of Employment &bull; {{COMPANY_NAME}}</p>
+                </div>
+                <div style="padding: 36px 32px;">
+                    <p style="color: #334155; font-size: 15px; line-height: 1.6; margin-top: 0;">
+                        On behalf of <strong>{{COMPANY_NAME}}</strong> and the executive recruitment board, we are thrilled to extend this formal offer of employment for the position of <strong>{{JOB_TITLE}}</strong>.
+                    </p>
+                    <p style="color: #334155; font-size: 14px; line-height: 1.6;">
+                        Your technical acumen, leadership skills, and cultural alignment throughout our interview rounds thoroughly impressed our panel. We are excited about the prospect of you joining our engineering team!
+                    </p>
+
+                    <div style="background: #f0fdf4; border: 2px solid #bbf7d0; border-radius: 14px; padding: 22px; margin: 24px 0;">
+                        <h3 style="margin: 0 0 14px 0; font-size: 13.5px; color: #166534; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">
+                            📋 Offer Summary & Compensation
+                        </h3>
+                        <table style="width: 100%; font-size: 13.5px; color: #334155; border-collapse: collapse;">
+                            <tr style="border-bottom: 1px solid #dcfce7;">
+                                <td style="padding: 7px 0; font-weight: 600; width: 140px; color: #15803d;">Position:</td>
+                                <td style="padding: 7px 0; font-weight: 700; color: #0f172a;">{{JOB_TITLE}}</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #dcfce7;">
+                                <td style="padding: 7px 0; font-weight: 600; color: #15803d;">Organization:</td>
+                                <td style="padding: 7px 0; font-weight: 700; color: #0f172a;">{{COMPANY_NAME}}</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #dcfce7;">
+                                <td style="padding: 7px 0; font-weight: 600; color: #15803d;">Compensation (CTC):</td>
+                                <td style="padding: 7px 0; font-weight: 800; color: #047857; font-size: 15.5px;">{{SALARY_LPA}}</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #dcfce7;">
+                                <td style="padding: 7px 0; font-weight: 600; color: #15803d;">Proposed Joining:</td>
+                                <td style="padding: 7px 0; font-weight: 600; color: #0f172a;">{{JOINING_DATE}}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 7px 0; font-weight: 600; color: #15803d; vertical-align: top;">Remarks:</td>
+                                <td style="padding: 7px 0; font-style: italic; color: #475569;">{{REMARKS}}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- PDF Attachment Callout Notice -->
+                    <div style="background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 12px; padding: 16px; margin-bottom: 24px; text-align: center;">
+                        <span style="font-size: 20px; display: block; margin-bottom: 4px;">📎</span>
+                        <strong style="color: #0f172a; font-size: 13px;">Official Signed Offer Letter Attached</strong>
+                        <p style="color: #64748b; font-size: 12px; margin: 4px 0 0 0;">
+                            Please find your official Letter of Employment attached to this email as a PDF (<strong>{{FILE_NAME}}</strong>).
+                        </p>
+                    </div>
+
+                    <div style="text-align: center; margin: 28px 0;">
+                        <a href="http://localhost:5173/#candidate-hub" target="_blank" style="display: inline-block; background: #059669; color: #ffffff; font-weight: 800; font-size: 14.5px; padding: 13px 30px; border-radius: 12px; text-decoration: none; box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35);">
+                            Accept & Review Offer in Candidate Hub &rarr;
+                        </a>
+                    </div>
+
+                    <p style="color: #64748b; font-size: 12px; line-height: 1.6; margin-bottom: 24px;">
+                        Please log in to your TalentFlow 360 portal to confirm acceptance. Our HR onboarding squad will reach out with the onboarding documentation checklist.
+                    </p>
+
+                    <div style="border-top: 1px solid #f1f5f9; padding-top: 20px; text-align: center; color: #94a3b8; font-size: 11px;">
+                        Talent Acquisition & People Operations &bull; {{COMPANY_NAME}} &bull; Powered by TalentFlow 360 ATS
+                    </div>
+                </div>
+            </div>
+            """
+            .replace("{{CANDIDATE_NAME}}", candidateName != null ? candidateName : "Candidate")
+            .replace("{{JOB_TITLE}}", jobTitle)
+            .replace("{{COMPANY_NAME}}", companyName)
+            .replace("{{SALARY_LPA}}", salaryDisplay)
+            .replace("{{JOINING_DATE}}", dateDisplay)
+            .replace("{{FILE_NAME}}", pdfFileName != null ? pdfFileName : "Offer_Letter.pdf")
+            .replace("{{REMARKS}}", remarks != null && !remarks.isBlank() ? remarks : "Welcome aboard! We are eager to work with you.");
+
+        sendEmailWithAttachment(toEmail, subject, htmlContent, pdfBytes, pdfFileName);
+    }
+
+    private void sendEmailWithAttachment(String toEmail, String subject, String htmlContent, byte[] attachmentBytes, String attachmentFileName) {
+        log.info("==========================================================================");
+        log.info("📧 [OUTGOING EMAIL DISPATCH WITH ATTACHMENT]");
+        log.info("To:         {}", toEmail);
+        log.info("Subject:    {}", subject);
+        log.info("Attachment: {} ({} bytes)", attachmentFileName, attachmentBytes != null ? attachmentBytes.length : 0);
+        log.info("==========================================================================");
+
+        if (mailSender != null && senderEmail != null && !senderEmail.isBlank()) {
+            try {
+                MimeMessage message = mailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+                helper.setFrom(senderEmail, "TalentFlow 360");
+                helper.setTo(toEmail);
+                helper.setSubject(subject);
+                helper.setText(htmlContent, true);
+
+                if (attachmentBytes != null && attachmentBytes.length > 0) {
+                    helper.addAttachment(
+                            (attachmentFileName != null && !attachmentFileName.isBlank()) ? attachmentFileName : "Offer_Letter.pdf",
+                            new org.springframework.core.io.ByteArrayResource(attachmentBytes),
+                            "application/pdf"
+                    );
+                }
+
+                mailSender.send(message);
+                log.info("✅ Offer Letter email with PDF successfully sent via SMTP to: {}", toEmail);
+                return;
+            } catch (Exception e) {
+                log.warn("⚠️ SMTP dispatch failed (e.g. Mail server credentials not configured). Falling back to console dispatch: {}", e.getMessage());
+            }
+        } else {
+            log.info("ℹ️ SMTP server not configured in application.yml. Offer letter email generated & logged above for local testing.");
+        }
     }
 
     private void sendEmail(String toEmail, String subject, String htmlContent) {

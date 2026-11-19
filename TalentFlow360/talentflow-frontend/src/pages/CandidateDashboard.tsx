@@ -4,7 +4,7 @@ import {
   ExternalLink, Mail, Phone, MapPin,
   CheckCircle2, Star, Sparkles, X, AlertCircle, ArrowLeft, LogIn, Send, Clock, Check,
   History, Video, Calendar, AlertTriangle, RefreshCw, Upload, Download,
-  MessageSquare, Lightbulb
+  MessageSquare, Lightbulb, FileCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import profileService, {
@@ -173,6 +173,31 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
       setHistoryItems([]);
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  // Application Withdrawal state
+  const [withdrawModalApp, setWithdrawModalApp] = useState<ApplicationResponse | null>(null);
+  const [withdrawingId, setWithdrawingId] = useState<number | null>(null);
+  const [withdrawSuccessMsg, setWithdrawSuccessMsg] = useState<string | null>(null);
+  const [withdrawErrorMsg, setWithdrawErrorMsg] = useState<string | null>(null);
+
+  const handleConfirmWithdraw = async () => {
+    if (!withdrawModalApp) return;
+    try {
+      setWithdrawingId(withdrawModalApp.id);
+      setWithdrawErrorMsg(null);
+      await applicationService.withdrawApplication(withdrawModalApp.id);
+      const title = `${withdrawModalApp.jobTitle} at ${withdrawModalApp.companyName}`;
+      setApplications((prev) => prev.filter((a) => a.id !== withdrawModalApp.id));
+      setWithdrawModalApp(null);
+      setWithdrawSuccessMsg(`Your application for "${title}" has been withdrawn and permanently deleted.`);
+      setTimeout(() => setWithdrawSuccessMsg(null), 7000);
+    } catch (err: any) {
+      console.error('Failed to withdraw application:', err);
+      setWithdrawErrorMsg(err?.response?.data?.message || 'Failed to withdraw application. Please try again.');
+    } finally {
+      setWithdrawingId(null);
     }
   };
 
@@ -1334,6 +1359,21 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
             </Button>
           </div>
 
+          {/* Withdrawal Success Alert Banner */}
+          {withdrawSuccessMsg && (
+            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2.5 text-xs text-emerald-800 animate-fadeIn">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="font-bold flex-1">{withdrawSuccessMsg}</span>
+              <button
+                type="button"
+                onClick={() => setWithdrawSuccessMsg(null)}
+                className="text-emerald-700 hover:text-emerald-950 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {loadingApplications ? (
             <div className="p-12 text-center">
               <div className="w-8 h-8 border-3 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto mb-3"></div>
@@ -1478,6 +1518,53 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                           </div>
                         )}
 
+                        {/* Formal Offer Released Candidate Celebration Banner */}
+                        {(app.status === 'OFFER_RELEASED' || app.status === 'HIRED' || app.offerLetterFilePath) && (
+                          <div className="my-4 p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/15 border-2 border-emerald-400/80 shadow-xs">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                              <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-600/30">
+                                  <FileCheck className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h5 className="font-extrabold text-slate-900 text-sm sm:text-base">
+                                      🎉 Congratulations! Official Offer Letter Released
+                                    </h5>
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                                      Official Offer
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-slate-600 mt-1">
+                                    <strong>{app.companyName}</strong> has extended a formal employment offer for the role of{' '}
+                                    <strong>{app.jobTitle}</strong>.
+                                    {app.offeredSalaryLpa && (
+                                      <span className="block sm:inline font-bold text-emerald-800 sm:ml-1">
+                                        • Offered Annual CTC: ₹ {app.offeredSalaryLpa.toFixed(2)} LPA
+                                      </span>
+                                    )}
+                                    {app.offerJoiningDate && (
+                                      <span className="block sm:inline text-slate-600 sm:ml-1">
+                                        • Joining: {app.offerJoiningDate}
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => applicationService.downloadOfferLetter(app.id, `Offer_Letter_${app.companyName.replace(/\s+/g, '_')}_${app.jobTitle.replace(/\s+/g, '_')}.pdf`)}
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-600/25 transition-all w-full sm:w-auto shrink-0 cursor-pointer"
+                                title="Download your official signed Offer Letter document"
+                              >
+                                <Download className="w-4 h-4" />
+                                Download Offer Letter (PDF)
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Application Note / Cover Letter */}
                         {app.coverLetter && (
                           <div className="mt-3 text-xs bg-slate-50 p-3 rounded-xl border border-slate-200/60 text-slate-600">
@@ -1522,7 +1609,19 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 lg:flex lg:flex-col gap-2 w-full lg:w-auto mt-1 sm:mt-0">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-col gap-2 w-full lg:w-auto mt-1 sm:mt-0">
+                          {(app.status === 'OFFER_RELEASED' || app.status === 'HIRED' || app.offerLetterFilePath) && (
+                            <button
+                              type="button"
+                              onClick={() => applicationService.downloadOfferLetter(app.id, `Offer_Letter_${app.companyName.replace(/\s+/g, '_')}_${app.jobTitle.replace(/\s+/g, '_')}.pdf`)}
+                              className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer w-full"
+                              title="Download official Offer Letter PDF"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Offer Letter (PDF)</span>
+                            </button>
+                          )}
+
                           <button
                             type="button"
                             onClick={() => setActiveChatApp(app)}
@@ -1550,6 +1649,31 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
                             <History className="w-3.5 h-3.5 text-brand-600" />
                             <span>Audit History</span>
                           </button>
+
+                          {/* Withdraw Application Action (Allowed at any stage EXCEPT after HIRED) */}
+                          {app.status === 'HIRED' ? (
+                            <div
+                              className="inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 py-2 px-3.5 rounded-xl border border-emerald-200/80 w-full"
+                              title="Application is finalized as Hired and cannot be withdrawn."
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>Hired (Locked)</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setWithdrawErrorMsg(null);
+                                setWithdrawModalApp(app);
+                              }}
+                              disabled={withdrawingId === app.id}
+                              className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100/80 px-3.5 py-2 rounded-xl transition-all border border-rose-200 shadow-2xs cursor-pointer w-full"
+                              title="Withdraw this application (removes it from Candidate & Recruiter hubs)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Withdraw Application</span>
+                            </button>
+                          )}
                         </div>
 
                         <span className="text-[10px] text-slate-400 font-mono text-center sm:text-right mt-0.5">
@@ -2860,6 +2984,92 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onBackTo
           onClose={() => setConstructiveFeedbackAppId(null)}
           applicationId={constructiveFeedbackAppId}
         />
+      )}
+
+      {/* ================= MODAL: WITHDRAW APPLICATION CONFIRMATION ================= */}
+      {withdrawModalApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            {/* Header */}
+            <div className="p-4 px-6 border-b border-rose-100 flex items-center justify-between bg-gradient-to-r from-rose-50 to-rose-100/60 text-slate-900">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-600 flex items-center justify-center border border-rose-400/30">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Withdraw Job Application</h3>
+                  <p className="text-[11px] text-slate-500">App #{withdrawModalApp.id}</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!withdrawingId) setWithdrawModalApp(null);
+                }}
+                disabled={Boolean(withdrawingId)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              {withdrawErrorMsg && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs text-rose-800">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span className="font-semibold">{withdrawErrorMsg}</span>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <p className="text-xs text-slate-700 leading-relaxed">
+                  Are you sure you want to withdraw your application for:
+                </p>
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <h4 className="font-bold text-slate-900 text-sm">{withdrawModalApp.jobTitle}</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">{withdrawModalApp.companyName}</p>
+                  <span className="inline-block mt-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200/80 text-slate-700">
+                    Current Stage: {withdrawModalApp.status}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 leading-relaxed flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block mb-0.5">Permanent Deletion Notice:</strong>
+                  Withdrawing will permanently remove this application from both your <strong>Candidate Hub</strong> and the employer's <strong>Recruiter Operations Hub</strong>.
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-4 px-6 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={Boolean(withdrawingId)}
+                onClick={() => setWithdrawModalApp(null)}
+              >
+                Keep Application
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                isLoading={Boolean(withdrawingId)}
+                onClick={handleConfirmWithdraw}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Yes, Withdraw & Delete
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

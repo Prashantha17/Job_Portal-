@@ -5,10 +5,12 @@ import com.talentflow.backend.dto.application.ApplicationResponse;
 import com.talentflow.backend.dto.application.ApplicationStatusHistoryResponse;
 import com.talentflow.backend.dto.application.ApplyJobRequest;
 import com.talentflow.backend.dto.application.ConstructiveFeedbackResponse;
+import com.talentflow.backend.dto.application.SendOfferLetterRequest;
 import com.talentflow.backend.dto.application.UpdateApplicationStatusRequest;
 import com.talentflow.backend.entity.*;
 import com.talentflow.backend.exception.ApiException;
 import com.talentflow.backend.exception.ResourceNotFoundException;
+import com.talentflow.backend.mongorepository.AtsAnalysisDocumentRepository;
 import com.talentflow.backend.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +20,10 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -35,6 +41,10 @@ public class ApplicationService {
     private final EmailService emailService;
     private final NotificationService notificationService;
     private final AtsResumeAnalyzerService atsResumeAnalyzerService;
+    private final OfferLetterPdfService offerLetterPdfService;
+    private final InterviewRepository interviewRepository;
+    private final ChatMessageRepository chatMessageRepository;
+    private final AtsAnalysisDocumentRepository atsAnalysisDocumentRepository;
 
     public ApplicationService(ApplicationRepository applicationRepository,
                               ApplicationStatusHistoryRepository historyRepository,
@@ -43,7 +53,11 @@ public class ApplicationService {
                               ProfileService profileService,
                               EmailService emailService,
                               NotificationService notificationService,
-                              AtsResumeAnalyzerService atsResumeAnalyzerService) {
+                              AtsResumeAnalyzerService atsResumeAnalyzerService,
+                              OfferLetterPdfService offerLetterPdfService,
+                              InterviewRepository interviewRepository,
+                              ChatMessageRepository chatMessageRepository,
+                              AtsAnalysisDocumentRepository atsAnalysisDocumentRepository) {
         this.applicationRepository = applicationRepository;
         this.historyRepository = historyRepository;
         this.jobRepository = jobRepository;
@@ -52,6 +66,10 @@ public class ApplicationService {
         this.emailService = emailService;
         this.notificationService = notificationService;
         this.atsResumeAnalyzerService = atsResumeAnalyzerService;
+        this.offerLetterPdfService = offerLetterPdfService;
+        this.interviewRepository = interviewRepository;
+        this.chatMessageRepository = chatMessageRepository;
+        this.atsAnalysisDocumentRepository = atsAnalysisDocumentRepository;
     }
 
     @Transactional
@@ -412,6 +430,10 @@ public class ApplicationService {
             dto.setResumeUrl(resume.getFilePath());
         }
 
+        dto.setOfferLetterFilePath(app.getOfferLetterFilePath());
+        dto.setOfferedSalaryLpa(app.getOfferedSalaryLpa());
+        dto.setOfferJoiningDate(app.getOfferJoiningDate());
+
         dto.setAppliedAt(app.getAppliedAt());
         dto.setUpdatedAt(app.getUpdatedAt());
 
@@ -531,6 +553,237 @@ public class ApplicationService {
         );
 
         return res;
+    }
+
+    @Transactional
+    public ApplicationResponse sendOfferLetter(Long applicationId, SendOfferLetterRequest req, String recruiterEmail) {
+        Application app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Application", "id", applicationId));
+
+        // Generate Offer Letter PDF
+        byte[] pdfBytes;
+        try {
+            pdfBytes = offerLetterPdfService.generateOfferLetterPdf(applicationId, req);
+        } catch (IOException e) {
+            log.error("Failed to compile offer letter PDF: {}", e.getMessage(), e);
+            throw new ApiException("Failed to generate Offer Letter PDF: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        // Ensure upload directory exists and save PDF file
+        String fileName = "Offer_Letter_App_" + applicationId + ".pdf";
+        Path uploadDir = Paths.get("uploads", "offers");
+        try {
+            if (!Files.exists(uploadDir)) {
+                Files.createDirectories(uploadDir);
+            }
+            Path filePath = uploadDir.resolve(fileName);
+            Files.write(filePath, pdfBytes);
+        } catch (IOException e) {
+            log.error("Failed to save offer letter PDF to disk: {}", e.getMessage(), e);
+        }
+
+        ApplicationStatus oldStatus = app.getStatus();
+        ApplicationStatus newStatus = req.isMarkAsHired() ? ApplicationStatus.HIRED : ApplicationStatus.OFFER_RELEASED;
+
+        app.setStatus(newStatus);
+        app.setOfferLetterFilePath("uploads/offers/" + fileName);
+        app.setOfferedSalaryLpa(req.getAnnualCtcLpa());
+        app.setOfferJoiningDate(req.getJoiningDate());
+        if (req.getCustomRemarks() != null && !req.getCustomRemarks().isBlank()) {
+            app.setNotes(req.getCustomRemarks());
+        }
+
+        Application saved = applicationRepository.save(app);
+
+        // Record Status History
+        String historyRemarks = "Formal Offer Letter generated (Rs. " + String.format("%.2f LPA", req.getAnnualCtcLpa()) +
+                ", Joining: " + req.getJoiningDate() + ") and dispatched via email";
+        ApplicationStatusHistory history = new ApplicationStatusHistory(
+                saved,
+                oldStatus,
+                newStatus,
+                recruiterEmail != null ? recruiterEmail : "Recruitment Team",
+                historyRemarks
+        );
+        historyRepository.save(history);
+
+        // Send congratulatory email with attached PDF to candidate
+        String candidateEmail = saved.getCandidateEmail();
+        String candidateName = (req.getCandidateName() != null && !req.getCandidateName().isBlank())
+                ? req.getCandidateName() : saved.getCandidateName();
+        String jobTitle = (req.getJobTitle() != null && !req.getJobTitle().isBlank())
+                ? req.getJobTitle() : (saved.getJob() != null ? saved.getJob().getTitle() : "Position");
+        String companyName = (req.getCompanyName() != null && !req.getCompanyName().isBlank())
+                ? req.getCompanyName() : ((saved.getJob() != null && saved.getJob().getCompany() != null)
+                ? saved.getJob().getCompany().getName() : "TalentFlow Enterprise");
+
+        if (candidateEmail != null && !candidateEmail.isBlank()) {
+            emailService.sendOfferLetterWithPdfEmail(
+                    candidateEmail,
+                    candidateName,
+                    jobTitle,
+                    companyName,
+                    req.getAnnualCtcLpa(),
+                    req.getJoiningDate(),
+                    req.getCustomRemarks(),
+                    pdfBytes,
+                    fileName
+            );
+
+            // In-app notification
+            try {
+                notificationService.createNotification(
+                        candidateEmail,
+                        "Formal Offer Letter Released!",
+                        "Congratulations " + candidateName + "! " + companyName + " has officially released your offer letter for " + jobTitle + " at INR " + String.format("%.2f", req.getAnnualCtcLpa()) + " LPA.",
+                        NotificationType.OFFER_RELEASED,
+                        "#candidate-hub",
+                        "applicationId=" + applicationId
+                );
+            } catch (Exception e) {
+                log.warn("Failed to create in-app notification for candidate: {}", e.getMessage());
+            }
+        }
+
+        return toResponse(saved);
+    }
+
+    public byte[] generateOfferLetterPreviewPdf(Long applicationId, SendOfferLetterRequest req) {
+        try {
+            return offerLetterPdfService.generateOfferLetterPdf(applicationId, req);
+        } catch (IOException e) {
+            log.error("Failed to generate preview PDF for application {}: {}", applicationId, e.getMessage(), e);
+            throw new ApiException("Failed to generate preview PDF: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public byte[] getOfferLetterPdfBytes(Long applicationId) {
+        Application app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Application", "id", applicationId));
+
+        String filePath = app.getOfferLetterFilePath();
+        if (filePath != null && !filePath.isBlank()) {
+            Path path = Paths.get(filePath);
+            if (Files.exists(path)) {
+                try {
+                    return Files.readAllBytes(path);
+                } catch (IOException e) {
+                    log.warn("Could not read saved offer letter file: {}", e.getMessage());
+                }
+            }
+        }
+
+        // Regenerate dynamically if not yet on disk
+        SendOfferLetterRequest req = new SendOfferLetterRequest();
+        req.setCandidateName(app.getCandidateName());
+        req.setCandidateEmail(app.getCandidateEmail());
+        req.setJobTitle(app.getJob() != null ? app.getJob().getTitle() : "Software Engineer");
+        req.setCompanyName(app.getJob() != null && app.getJob().getCompany() != null
+                ? app.getJob().getCompany().getName() : "TalentFlow Enterprise");
+        req.setAnnualCtcLpa(app.getOfferedSalaryLpa() != null
+                ? app.getOfferedSalaryLpa()
+                : (app.getExpectedCtcLpa() != null ? app.getExpectedCtcLpa() : 12.0));
+        req.setJoiningDate(app.getOfferJoiningDate() != null ? app.getOfferJoiningDate() : "Within 30 Days");
+        req.setJobLocation(app.getJob() != null ? app.getJob().getLocation() : "Bangalore / Hybrid");
+        req.setReportingManager("Engineering Hiring Lead");
+        req.setAcceptanceDeadline("Within 7 Business Days");
+        req.setSigneeName("Talent Acquisition Director");
+        req.setSigneeTitle("Head of People Operations");
+
+        try {
+            return offerLetterPdfService.generateOfferLetterPdf(applicationId, req);
+        } catch (IOException e) {
+            throw new ApiException("Offer letter document could not be compiled", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @Transactional
+    public void withdrawApplication(Long applicationId, String candidateEmail) {
+        String cleanEmail = candidateEmail.toLowerCase().trim();
+        Application app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Application", "id", applicationId));
+
+        // 1. Verify candidate ownership
+        String candidateEmailInApp = app.getCandidateEmail();
+        String profileUserEmail = (app.getCandidateProfile() != null && app.getCandidateProfile().getUser() != null)
+                ? app.getCandidateProfile().getUser().getEmail() : null;
+
+        boolean isAuthorized = (candidateEmailInApp != null && candidateEmailInApp.equalsIgnoreCase(cleanEmail)) ||
+                               (profileUserEmail != null && profileUserEmail.equalsIgnoreCase(cleanEmail));
+
+        if (!isAuthorized) {
+            throw new AccessDeniedException("You are not authorized to withdraw this application.");
+        }
+
+        // 2. Prohibit withdrawal if already hired
+        if (app.getStatus() == ApplicationStatus.HIRED) {
+            throw new ApiException("This application has already reached the HIRED stage and cannot be withdrawn.", HttpStatus.BAD_REQUEST);
+        }
+
+        // 3. Decrement job vacancy application counter
+        Job job = app.getJob();
+        if (job != null && job.getApplicationsCount() != null && job.getApplicationsCount() > 0) {
+            job.setApplicationsCount(job.getApplicationsCount() - 1);
+            jobRepository.save(job);
+        }
+
+        // 4. Delete offer letter PDF file on disk if generated
+        if (app.getOfferLetterFilePath() != null && !app.getOfferLetterFilePath().isBlank()) {
+            try {
+                Path p = Paths.get(app.getOfferLetterFilePath());
+                Files.deleteIfExists(p);
+            } catch (Exception ex) {
+                log.warn("Could not delete offer letter file on application withdrawal: {}", ex.getMessage());
+            }
+        }
+
+        // 5. Clean up child records in related tables
+        try {
+            chatMessageRepository.deleteByApplicationId(applicationId);
+        } catch (Exception ex) {
+            log.warn("Error deleting chat messages for app #{}: {}", applicationId, ex.getMessage());
+        }
+
+        try {
+            interviewRepository.deleteByApplicationId(applicationId);
+        } catch (Exception ex) {
+            log.warn("Error deleting interviews for app #{}: {}", applicationId, ex.getMessage());
+        }
+
+        try {
+            historyRepository.deleteByApplicationId(applicationId);
+        } catch (Exception ex) {
+            log.warn("Error deleting status history for app #{}: {}", applicationId, ex.getMessage());
+        }
+
+        try {
+            if (atsAnalysisDocumentRepository != null) {
+                atsAnalysisDocumentRepository.deleteByApplicationId(applicationId);
+            }
+        } catch (Exception ex) {
+            log.warn("Error deleting ATS analysis document for app #{}: {}", applicationId, ex.getMessage());
+        }
+
+        // 6. Delete Application entity completely from database
+        applicationRepository.delete(app);
+        log.info("Application #{} for candidate {} withdrawn and permanently deleted from portal.", applicationId, cleanEmail);
+
+        // 7. Notify recruiter
+        if (job != null && job.getPostedBy() != null && job.getPostedBy().getEmail() != null) {
+            try {
+                String candidateDisplayName = app.getCandidateName() != null ? app.getCandidateName() : cleanEmail;
+                notificationService.createNotification(
+                        job.getPostedBy().getEmail(),
+                        "Application Withdrawn",
+                        candidateDisplayName + " has withdrawn their application for " + job.getTitle() + ".",
+                        NotificationType.APPLICATION_STATUS_UPDATED,
+                        "#recruiter-hub",
+                        "jobId=" + job.getId()
+                );
+            } catch (Exception e) {
+                log.warn("Failed to notify recruiter on withdrawal: {}", e.getMessage());
+            }
+        }
     }
 }
 

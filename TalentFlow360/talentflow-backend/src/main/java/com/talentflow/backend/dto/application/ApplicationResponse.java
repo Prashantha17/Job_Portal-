@@ -33,6 +33,9 @@ public class ApplicationResponse {
     private String rejectionReason;
     private Double atsScore;
     private String atsMatchTier;
+    private String offerLetterFilePath;
+    private Double offeredSalaryLpa;
+    private String offerJoiningDate;
     private Instant appliedAt;
     private Instant updatedAt;
 
@@ -121,5 +124,14 @@ public class ApplicationResponse {
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getOfferLetterFilePath() { return offerLetterFilePath; }
+    public void setOfferLetterFilePath(String offerLetterFilePath) { this.offerLetterFilePath = offerLetterFilePath; }
+
+    public Double getOfferedSalaryLpa() { return offeredSalaryLpa; }
+    public void setOfferedSalaryLpa(Double offeredSalaryLpa) { this.offeredSalaryLpa = offeredSalaryLpa; }
+
+    public String getOfferJoiningDate() { return offerJoiningDate; }
+    public void setOfferJoiningDate(String offerJoiningDate) { this.offerJoiningDate = offerJoiningDate; }
 }
 

@@ -1,6 +1,6 @@
 import apiClient from './api';
 import { ApiResponse } from '../types/health';
-import { ApplicationResponse, ApplyJobRequest, ApplicationStatusHistoryItem, AtsAnalysisReport } from '../types/application';
+import { ApplicationResponse, ApplyJobRequest, ApplicationStatusHistoryItem, AtsAnalysisReport, SendOfferLetterRequest } from '../types/application';
 
 export const applicationService = {
   async applyForJob(payload: ApplyJobRequest): Promise<ApplicationResponse> {
@@ -57,6 +57,40 @@ export const applicationService = {
   async getApplicationAtsAnalysis(applicationId: number): Promise<AtsAnalysisReport> {
     const response = await apiClient.get<ApiResponse<AtsAnalysisReport>>(`/api/v1/applications/${applicationId}/ats-analysis`);
     return response.data.data;
+  },
+
+  async sendOfferLetter(applicationId: number, req: SendOfferLetterRequest): Promise<ApplicationResponse> {
+    const response = await apiClient.post<ApiResponse<ApplicationResponse>>(
+      `/api/v1/applications/${applicationId}/offer-letter/send`,
+      req
+    );
+    return response.data.data;
+  },
+
+  async previewOfferLetterPdf(applicationId: number, req: SendOfferLetterRequest): Promise<Blob> {
+    const response = await apiClient.post(`/api/v1/applications/${applicationId}/offer-letter/preview-pdf`, req, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  async downloadOfferLetter(applicationId: number, fileName?: string): Promise<void> {
+    const response = await apiClient.get(`/api/v1/applications/${applicationId}/offer-letter/download`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName || `Offer_Letter_App_${applicationId}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  async withdrawApplication(applicationId: number): Promise<void> {
+    await apiClient.delete(`/api/v1/applications/${applicationId}/withdraw`);
   },
 };
 

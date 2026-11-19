@@ -11,6 +11,11 @@ spring:
     name: talentflow-backend
   profiles:
     active: dev
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:talentflow-backend/.env[.properties]
+      - optional:file:../.env[.properties]
 
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/talentflow_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
@@ -54,9 +59,9 @@ spring:
             required: true
           ssl:
             trust: smtp.gmail.com
-          connectiontimeout: 10000
-          timeout: 10000
-          writetimeout: 10000
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
 management:
   endpoints:

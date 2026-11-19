@@ -8,7 +8,7 @@ export const apiClient = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  timeout: 10000,
+  timeout: 30000, // 30-second timeout for file uploads, ATS analysis, and background tasks
 });
 
 // Attach JWT Bearer token automatically to every outgoing request
