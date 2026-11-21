@@ -1,0 +1,77 @@
+{
+  "suite_name": "TalentFlow 360 Automated End-to-End UI Suite",
+  "timestamp": "2026-11-21 11:51:31",
+  "base_url": "http://127.0.0.1:5173",
+  "browser": "Microsoft Edge (Headless Chromium)",
+  "metrics": {
+    "total_executed": 9,
+    "passed": 9,
+    "failed": 0,
+    "success_rate_percent": 100.0
+  },
+  "test_cases": [
+    {
+      "test_id": "TC-001",
+      "name": "Landing Page Branding & Hero Section",
+      "status": "PASS",
+      "duration_seconds": 2.45,
+      "details": "Title 'TalentFlow 360 | Intelligent Recruitment & Talent Management Platform' & Hero elements verified"
+    },
+    {
+      "test_id": "TC-002",
+      "name": "Browse Jobs Catalog & Search Bar",
+      "status": "PASS",
+      "duration_seconds": 2.417,
+      "details": "Search inputs & Job cards validated"
+    },
+    {
+      "test_id": "TC-003",
+      "name": "Workplace Filters Interaction",
+      "status": "PASS",
+      "duration_seconds": 2.47,
+      "details": "REMOTE & HYBRID filter buttons interactable"
+    },
+    {
+      "test_id": "TC-004",
+      "name": "Login View & Mode Tab Switching",
+      "status": "PASS",
+      "duration_seconds": 3.22,
+      "details": "Password & OTP tabs toggled cleanly"
+    },
+    {
+      "test_id": "TC-005",
+      "name": "Auth Form Client-Side Validation",
+      "status": "PASS",
+      "duration_seconds": 2.178,
+      "details": "Blank submission guarded by form validation"
+    },
+    {
+      "test_id": "TC-006",
+      "name": "Registration View & Role Toggle",
+      "status": "PASS",
+      "duration_seconds": 2.618,
+      "details": "Candidate & Employer roles selectable"
+    },
+    {
+      "test_id": "TC-007",
+      "name": "Resume Builder Demo Sign-In & Workspace",
+      "status": "PASS",
+      "duration_seconds": 3.945,
+      "details": "Logged in via candidate demo & workspace verified"
+    },
+    {
+      "test_id": "TC-008",
+      "name": "Candidate Career Hub & ATS Pipeline",
+      "status": "PASS",
+      "duration_seconds": 1.709,
+      "details": "Career Hub view & application tracker confirmed"
+    },
+    {
+      "test_id": "TC-009",
+      "name": "Mobile Viewport Responsiveness (375x812)",
+      "status": "PASS",
+      "duration_seconds": 2.108,
+      "details": "Clean rendering under mobile dimensions"
+    }
+  ]
+}

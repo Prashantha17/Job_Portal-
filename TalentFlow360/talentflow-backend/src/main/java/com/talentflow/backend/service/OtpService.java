@@ -40,9 +40,12 @@ public class OtpService {
         EmailOtp emailOtp = new EmailOtp(cleanEmail, otpCode, purpose, expiryTime);
         emailOtpRepository.save(emailOtp);
 
+        // Immediate synchronous cache update so fallback OTP lookup is O(1) instant (<1ms)
+        emailService.storeDevOtp(cleanEmail, otpCode);
+
         log.info("Generated {} OTP for {}: {}", purpose, cleanEmail, otpCode);
 
-        // Send Email
+        // Send Email asynchronously via ThreadPoolTaskExecutor
         if (purpose == OtpPurpose.LOGIN) {
             emailService.sendLoginOtpEmail(cleanEmail, otpCode);
         } else if (purpose == OtpPurpose.FORGOT_PASSWORD) {
@@ -73,5 +76,9 @@ public class OtpService {
         emailOtpRepository.save(emailOtp);
         log.info("OTP successfully verified for {} ({})", cleanEmail, purpose);
         return true;
+    }
+
+    public String getDevOtp(String email) {
+        return emailService.getDevOtp(email);
     }
 }

@@ -37,8 +37,22 @@ public class AtsResumeAnalyzerService {
     private final AtsAnalysisDocumentRepository atsAnalysisRepository;
     private final ResumeDocumentRepository resumeDocumentRepository;
 
+    // Precompiled Regex Patterns for High-Performance ATS Evaluation (O(1) compilation overhead)
+    private static final Pattern ASCII_WORD_PATTERN = Pattern.compile("[a-zA-Z0-9#+.-]{2,}");
+    private static final Pattern METRIC_PATTERN = Pattern.compile("(\\d+%|\\$\\d+[kKmM]?|₹\\d+[kKmMlL]?|\\d+x|\\b\\d{2,}\\+?\\s*(?:users|clients|customers|requests|queries|tps|qps|endpoints|microservices|tables|records|seconds|ms|percent|lines|engineers|members|projects|features))\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ACTION_VERB_PATTERN = Pattern.compile("\\b(architected|engineered|spearheaded|developed|designed|implemented|built|optimized|reduced|accelerated|automated|scaled|deployed|streamlined|orchestrated|refactored|launched|created|integrated)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern PASSIVE_PATTERN = Pattern.compile("\\b(responsible for|worked on|helped with|assisted with|handled|tasked with|involved in|participated in|contributed to|duties included|worked as|was part of)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}");
+    private static final Pattern PHONE_PATTERN = Pattern.compile("(?:\\+91[-.\\s]?)?[6-9]\\d{4}[-.\\s]?\\d{5}|\\+?\\d{1,3}[-.\\s]?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}");
+    private static final Pattern LINKEDIN_PATTERN = Pattern.compile("linkedin\\.com/(?:in/)?[a-zA-Z0-9_-]+");
+    private static final Pattern GITHUB_PATTERN = Pattern.compile("github\\.com/[a-zA-Z0-9_-]+");
+    private static final Pattern DEGREE_PATTERN = Pattern.compile("\\b(B\\.?Tech|B\\.?E\\.?|Bachelor of Technology|Bachelor of Engineering|BCA|MCA|M\\.?Tech|M\\.?E\\.?|Master of Technology|B\\.?S\\.?|M\\.?S\\.?|Bachelor of Science|Master of Science|BSc|MSc|MBA|Ph\\.?D)\\b(?:\\s+(?:in|of)?\\s+([A-Za-z\\s&]{3,50}))?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern EXP_YEARS_PATTERN = Pattern.compile("(\\d{1,2})\\+?\\s*(?:years?|yrs?)\\s*(?:of)?\\s*(?:experience|exp)?");
+    private static final Pattern VERB_STARTING_PATTERN = Pattern.compile("(?i)^[a-z]+(?:ed|ing|s)?\\b.*");
+
     // Comprehensive 160+ In-Demand Technical Skills Catalog
     private static final Map<String, String> SKILL_CATALOG = new LinkedHashMap<>();
+    private static final Map<String, Pattern> SHORT_KEYWORD_PATTERNS = new HashMap<>();
 
     static {
         // Languages
@@ -181,6 +195,13 @@ public class AtsResumeAnalyzerService {
         registerSkill("TDD", "tdd", "test driven development");
         registerSkill("Agile / Scrum", "agile", "scrum", "jira");
         registerSkill("Git", "git", "github", "gitlab");
+
+        // Precompile regex boundaries for short catalog keywords (O(1) runtime lookup)
+        for (String kw : SKILL_CATALOG.keySet()) {
+            if (kw.length() <= 3) {
+                SHORT_KEYWORD_PATTERNS.put(kw, Pattern.compile("\\b" + Pattern.quote(kw) + "\\b"));
+            }
+        }
     }
 
     private static void registerSkill(String displayName, String... keywords) {
@@ -246,7 +267,7 @@ public class AtsResumeAnalyzerService {
         }
 
         // ASCII word regex extraction for binary formats
-        Matcher m = Pattern.compile("[a-zA-Z0-9#+.-]{2,}").matcher(new String(fileBytes, StandardCharsets.ISO_8859_1));
+        Matcher m = ASCII_WORD_PATTERN.matcher(new String(fileBytes, StandardCharsets.ISO_8859_1));
         StringBuilder sb = new StringBuilder();
         while (m.find()) {
             sb.append(m.group()).append(" ");
@@ -427,7 +448,7 @@ public class AtsResumeAnalyzerService {
         }
 
         // 3. QUANTIFIED IMPACT & EXPERIENCE METRICS (Max 25.0)
-        int metricMentions = countMatches(normResume, Pattern.compile("(\\d+%|\\$\\d+[kKmM]?|₹\\d+[kKmMlL]?|\\d+x|\\b\\d{2,}\\+?\\s*(?:users|clients|customers|requests|queries|tps|qps|endpoints|microservices|tables|records|seconds|ms|percent|lines|engineers|members|projects|features))\\b", Pattern.CASE_INSENSITIVE));
+        int metricMentions = countMatches(normResume, METRIC_PATTERN);
         double expScore;
         if (metricMentions == 0) expScore = 7.0;
         else if (metricMentions == 1) expScore = 12.0;
@@ -447,8 +468,8 @@ public class AtsResumeAnalyzerService {
         if (wordCount >= 380 && wordCount <= 850) formatScore += 2.5;
 
         // 5. ACTION VERBS VS PASSIVE CLICHES (Max 15.0)
-        int actionVerbMatches = countMatches(normResume, Pattern.compile("\\b(architected|engineered|spearheaded|developed|designed|implemented|built|optimized|reduced|accelerated|automated|scaled|deployed|streamlined|orchestrated|refactored|launched|created|integrated)\\b", Pattern.CASE_INSENSITIVE));
-        int passiveMatches = countMatches(normResume, Pattern.compile("\\b(responsible for|worked on|helped with|assisted with|handled|tasked with|involved in|participated in|contributed to|duties included|worked as|was part of)\\b", Pattern.CASE_INSENSITIVE));
+        int actionVerbMatches = countMatches(normResume, ACTION_VERB_PATTERN);
+        int passiveMatches = countMatches(normResume, PASSIVE_PATTERN);
 
         double clarityScore = Math.min(12.0, actionVerbMatches * 1.8) + 3.0;
         if (passiveMatches > 0) {
@@ -571,7 +592,7 @@ public class AtsResumeAnalyzerService {
         }
 
         // 3. METRICS & QUANTIFIABLE ACHIEVEMENTS (Max 25.0)
-        int metricMentions = countMatches(norm, Pattern.compile("(\\d+%|\\$\\d+[kKmM]?|₹\\d+[kKmMlL]?|\\d+x|\\b\\d{2,}\\+?\\s*(?:users|clients|customers|requests|queries|tps|qps|endpoints|microservices|tables|records|seconds|ms|percent|lines|engineers|members|projects|features))\\b", Pattern.CASE_INSENSITIVE));
+        int metricMentions = countMatches(norm, METRIC_PATTERN);
         double expScore;
         if (metricMentions == 0) expScore = 7.0;
         else if (metricMentions == 1) expScore = 12.0;
@@ -591,8 +612,8 @@ public class AtsResumeAnalyzerService {
         if (wordCount >= 380 && wordCount <= 850) formatScore += 2.5;
 
         // 5. CLARITY, ACTION VERBS VS PASSIVE CLICHÉS (Max 15.0)
-        int actionVerbMatches = countMatches(norm, Pattern.compile("\\b(architected|engineered|spearheaded|developed|designed|implemented|built|optimized|reduced|accelerated|automated|scaled|deployed|streamlined|orchestrated|refactored|launched|created|integrated)\\b", Pattern.CASE_INSENSITIVE));
-        int passiveMatches = countMatches(norm, Pattern.compile("\\b(responsible for|worked on|helped with|assisted with|handled|tasked with|involved in|participated in|contributed to|duties included|worked as|was part of)\\b", Pattern.CASE_INSENSITIVE));
+        int actionVerbMatches = countMatches(norm, ACTION_VERB_PATTERN);
+        int passiveMatches = countMatches(norm, PASSIVE_PATTERN);
 
         double clarityScore = Math.min(12.0, actionVerbMatches * 1.8) + 3.0;
         if (passiveMatches > 0) {
@@ -712,32 +733,31 @@ public class AtsResumeAnalyzerService {
 
     public String extractEmail(String text) {
         if (text == null) return null;
-        Matcher m = Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}").matcher(text);
+        Matcher m = EMAIL_PATTERN.matcher(text);
         return m.find() ? m.group() : null;
     }
 
     public String extractPhone(String text) {
         if (text == null) return null;
-        Matcher m = Pattern.compile("(?:\\+91[-.\\s]?)?[6-9]\\d{4}[-.\\s]?\\d{5}|\\+?\\d{1,3}[-.\\s]?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}").matcher(text);
+        Matcher m = PHONE_PATTERN.matcher(text);
         return m.find() ? m.group().replaceAll("\\s+", " ").trim() : null;
     }
 
     public String extractLinkedIn(String text) {
         if (text == null) return null;
-        Matcher m = Pattern.compile("linkedin\\.com/(?:in/)?[a-zA-Z0-9_-]+").matcher(text);
+        Matcher m = LINKEDIN_PATTERN.matcher(text);
         return m.find() ? m.group() : null;
     }
 
     public String extractGitHub(String text) {
         if (text == null) return null;
-        Matcher m = Pattern.compile("github\\.com/[a-zA-Z0-9_-]+").matcher(text);
+        Matcher m = GITHUB_PATTERN.matcher(text);
         return m.find() ? m.group() : null;
     }
 
     public String extractDegree(String text) {
         if (text == null || text.isBlank()) return "Not explicitly specified";
-        Pattern p = Pattern.compile("\\b(B\\.?Tech|B\\.?E\\.?|Bachelor of Technology|Bachelor of Engineering|BCA|MCA|M\\.?Tech|M\\.?E\\.?|Master of Technology|B\\.?S\\.?|M\\.?S\\.?|Bachelor of Science|Master of Science|BSc|MSc|MBA|Ph\\.?D)\\b(?:\\s+(?:in|of)?\\s+([A-Za-z\\s&]{3,50}))?", Pattern.CASE_INSENSITIVE);
-        Matcher m = p.matcher(text);
+        Matcher m = DEGREE_PATTERN.matcher(text);
         if (m.find()) {
             String degree = m.group(1).trim();
             String major = m.group(2) != null ? m.group(2).trim() : "";
@@ -818,26 +838,24 @@ public class AtsResumeAnalyzerService {
     }
 
     private boolean isVerbStarting(String text) {
-        return text.matches("(?i)^[a-z]+(?:ed|ing|s)?\\b.*");
+        return VERB_STARTING_PATTERN.matcher(text).matches();
     }
 
     public List<String> auditBullets(List<String> bullets, String targetRole) {
         List<String> audits = new ArrayList<>();
-        Pattern metricPattern = Pattern.compile("(\\d+%|\\$\\d+[kKmM]?|₹\\d+[kKmMlL]?|\\d+x|\\b\\d{2,}\\+?\\s*(?:users|clients|customers|requests|queries|tps|qps|endpoints|microservices|tables|records|seconds|ms|percent|lines|engineers|members|projects|features))\\b", Pattern.CASE_INSENSITIVE);
-        Pattern passivePattern = Pattern.compile("\\b(responsible for|worked on|helped with|assisted with|handled|tasked with|involved in|participated in|contributed to|duties included|worked as|was part of)\\b", Pattern.CASE_INSENSITIVE);
 
         for (String b : bullets) {
             if (audits.size() >= 3) break;
 
-            boolean hasMetric = metricPattern.matcher(b).find();
-            boolean hasPassive = passivePattern.matcher(b).find();
+            boolean hasMetric = METRIC_PATTERN.matcher(b).find();
+            boolean hasPassive = PASSIVE_PATTERN.matcher(b).find();
 
             if (hasPassive || !hasMetric) {
                 String flaw;
                 if (hasPassive && !hasMetric) {
-                    flaw = "Passive phrasing detected ('" + extractMatchedPassive(b, passivePattern) + "') + Zero quantifiable impact metrics.";
+                    flaw = "Passive phrasing detected ('" + extractMatchedPassive(b, PASSIVE_PATTERN) + "') + Zero quantifiable impact metrics.";
                 } else if (hasPassive) {
-                    flaw = "Diluted passive verb ('" + extractMatchedPassive(b, passivePattern) + "') weakens recruiter impression of ownership.";
+                    flaw = "Diluted passive verb ('" + extractMatchedPassive(b, PASSIVE_PATTERN) + "') weakens recruiter impression of ownership.";
                 } else {
                     flaw = "Lacks measurable numbers (no %, latency reduction, user volume, or efficiency scale).";
                 }
@@ -973,8 +991,8 @@ public class AtsResumeAnalyzerService {
         for (Map.Entry<String, String> entry : SKILL_CATALOG.entrySet()) {
             String kw = entry.getKey();
             if (kw.length() <= 3) {
-                Pattern p = Pattern.compile("\\b" + Pattern.quote(kw) + "\\b");
-                if (p.matcher(lower).find()) {
+                Pattern p = SHORT_KEYWORD_PATTERNS.get(kw);
+                if (p != null && p.matcher(lower).find()) {
                     matched.add(entry.getValue());
                 }
             } else {
@@ -1039,7 +1057,7 @@ public class AtsResumeAnalyzerService {
     }
 
     public int extractYearsFromResume(String text) {
-        Matcher m = Pattern.compile("(\\d{1,2})\\+?\\s*(?:years?|yrs?)\\s*(?:of)?\\s*(?:experience|exp)?").matcher(text);
+        Matcher m = EXP_YEARS_PATTERN.matcher(text);
         int max = 0;
         while (m.find()) {
             try {

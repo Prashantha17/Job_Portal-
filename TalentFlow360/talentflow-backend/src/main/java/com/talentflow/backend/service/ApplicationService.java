@@ -45,6 +45,7 @@ public class ApplicationService {
     private final InterviewRepository interviewRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final AtsAnalysisDocumentRepository atsAnalysisDocumentRepository;
+    private final UserRepository userRepository;
 
     public ApplicationService(ApplicationRepository applicationRepository,
                               ApplicationStatusHistoryRepository historyRepository,
@@ -57,7 +58,8 @@ public class ApplicationService {
                               OfferLetterPdfService offerLetterPdfService,
                               InterviewRepository interviewRepository,
                               ChatMessageRepository chatMessageRepository,
-                              AtsAnalysisDocumentRepository atsAnalysisDocumentRepository) {
+                              AtsAnalysisDocumentRepository atsAnalysisDocumentRepository,
+                              UserRepository userRepository) {
         this.applicationRepository = applicationRepository;
         this.historyRepository = historyRepository;
         this.jobRepository = jobRepository;
@@ -70,6 +72,7 @@ public class ApplicationService {
         this.interviewRepository = interviewRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.atsAnalysisDocumentRepository = atsAnalysisDocumentRepository;
+        this.userRepository = userRepository;
     }
 
     @Transactional
@@ -374,6 +377,21 @@ public class ApplicationService {
     public List<ApplicationStatusHistoryResponse> getApplicationHistory(Long applicationId, String requestingEmail) {
         Application app = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Application", "id", applicationId));
+
+        // Security check: only candidate, job recruiter, or admin may access internal audit notes
+        String candidateEmail = app.getCandidateEmail();
+        String recruiterEmail = (app.getJob() != null && app.getJob().getPostedBy() != null)
+                ? app.getJob().getPostedBy().getEmail() : null;
+        boolean isCandidate = candidateEmail != null && candidateEmail.equalsIgnoreCase(requestingEmail);
+        boolean isRecruiter = recruiterEmail != null && recruiterEmail.equalsIgnoreCase(requestingEmail);
+        if (!isCandidate && !isRecruiter) {
+            boolean isAdmin = userRepository.findByEmail(requestingEmail)
+                    .map(u -> u.getRoles() != null && u.getRoles().stream().anyMatch(r -> r.getName().name().equals("ROLE_SUPER_ADMIN")))
+                    .orElse(false);
+            if (!isAdmin) {
+                throw new AccessDeniedException("You are not authorized to view this application's audit history.");
+            }
+        }
 
         return historyRepository.findByApplicationIdOrderByChangedAtAsc(applicationId).stream()
                 .map(h -> new ApplicationStatusHistoryResponse(

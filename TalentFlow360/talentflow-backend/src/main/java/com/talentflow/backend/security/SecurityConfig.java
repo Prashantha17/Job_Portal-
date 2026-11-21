@@ -72,19 +72,19 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/v1/health/**").permitAll()
-                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/actuator/**").hasRole("SUPER_ADMIN")
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/skills/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/jobs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/companies/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/candidates/resumes/**", "/api/v1/applications/*/resume/download", "/api/v1/applications/*/offer-letter/download").permitAll()
 
                         // Role-specific endpoint rules
                         .requestMatchers("/api/v1/admin/**").hasRole("SUPER_ADMIN")
                         .requestMatchers("/api/v1/hr/**").hasAnyRole("HR_MANAGER", "SUPER_ADMIN")
                         .requestMatchers("/api/v1/recruiter/**", "/api/v1/recruiters/**", "/api/v1/analytics/**", "/api/v1/matching/jobs/**").hasAnyRole("RECRUITER", "HR_MANAGER", "SUPER_ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/candidates/*", "/api/v1/candidates/by-email").hasAnyRole("RECRUITER", "HR_MANAGER", "SUPER_ADMIN", "JOB_SEEKER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/candidates/*", "/api/v1/candidates/by-email").hasAnyRole("RECRUITER", "HR_MANAGER", "SUPER_ADMIN")
                         .requestMatchers("/api/v1/candidates/**", "/api/v1/candidate/**", "/api/v1/matching/candidate/**").hasAnyRole("JOB_SEEKER", "SUPER_ADMIN")
 
                         // All other endpoints require authentication

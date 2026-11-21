@@ -1,19 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { Navbar, AppView } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { LandingPage } from './pages/LandingPage';
-import { BrowseJobs } from './pages/BrowseJobs';
-import { CandidateDashboard } from './pages/CandidateDashboard';
-import { RecruiterDashboard } from './pages/RecruiterDashboard';
-import { ResumeBuilder } from './pages/ResumeBuilder';
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
 import { AuthModal } from './components/auth/AuthModal';
 import { LiveToastContainer } from './components/notification/LiveToastContainer';
-import { StandaloneAtsScannerModal } from './components/ats/StandaloneAtsScannerModal';
 import { useAuth } from './context/AuthContext';
+
+// Dynamic code-splitting for high performance & minimal initial bundle footprint
+const BrowseJobs = lazy(() => import('./pages/BrowseJobs').then(m => ({ default: m.BrowseJobs })));
+const CandidateDashboard = lazy(() => import('./pages/CandidateDashboard').then(m => ({ default: m.CandidateDashboard })));
+const RecruiterDashboard = lazy(() => import('./pages/RecruiterDashboard').then(m => ({ default: m.RecruiterDashboard })));
+const ResumeBuilder = lazy(() => import('./pages/ResumeBuilder').then(m => ({ default: m.ResumeBuilder })));
+const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
+const RegisterPage = lazy(() => import('./pages/RegisterPage').then(m => ({ default: m.RegisterPage })));
+const StandaloneAtsScannerModal = lazy(() => import('./components/ats/StandaloneAtsScannerModal').then(m => ({ default: m.StandaloneAtsScannerModal })));
+
+const PageLoadingFallback: React.FC = () => (
+  <div className="flex flex-col items-center justify-center min-h-[55vh] py-16">
+    <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+    <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Loading module...</p>
+  </div>
+);
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, openAuthModal } = useAuth();
@@ -90,51 +99,55 @@ const AppContent: React.FC = () => {
       />
       
       <main className="flex-1">
-        {currentView === 'browse-jobs' && (
-          <BrowseJobs onBackToHome={() => handleNavigate('home')} />
-        )}
-        {currentView === 'candidate-dashboard' && (
-          <CandidateDashboard
-            onBackToHome={() => handleNavigate('home')}
-            onOpenAtsScanner={handleOpenAtsScanner}
-          />
-        )}
-        {currentView === 'recruiter-dashboard' && (
-          <RecruiterDashboard onBackToHome={() => handleNavigate('home')} />
-        )}
-        {currentView === 'resume-builder' && (
-          <ResumeBuilder onBack={() => handleNavigate('home')} />
-        )}
-        {currentView === 'login' && (
-          <LoginPage
-            onNavigateHome={() => handleNavigate('home')}
-            onNavigateRegister={() => handleNavigate('register')}
-          />
-        )}
-        {currentView === 'register' && (
-          <RegisterPage
-            onNavigateHome={() => handleNavigate('home')}
-            onNavigateLogin={() => handleNavigate('login')}
-          />
-        )}
-        {currentView === 'home' && (
-          <LandingPage
-            onExploreJobs={() => handleNavigate('browse-jobs')}
-            onOpenAtsScanner={handleOpenAtsScanner}
-          />
-        )}
+        <Suspense fallback={<PageLoadingFallback />}>
+          {currentView === 'browse-jobs' && (
+            <BrowseJobs onBackToHome={() => handleNavigate('home')} />
+          )}
+          {currentView === 'candidate-dashboard' && (
+            <CandidateDashboard
+              onBackToHome={() => handleNavigate('home')}
+              onOpenAtsScanner={handleOpenAtsScanner}
+            />
+          )}
+          {currentView === 'recruiter-dashboard' && (
+            <RecruiterDashboard onBackToHome={() => handleNavigate('home')} />
+          )}
+          {currentView === 'resume-builder' && (
+            <ResumeBuilder onBack={() => handleNavigate('home')} />
+          )}
+          {currentView === 'login' && (
+            <LoginPage
+              onNavigateHome={() => handleNavigate('home')}
+              onNavigateRegister={() => handleNavigate('register')}
+            />
+          )}
+          {currentView === 'register' && (
+            <RegisterPage
+              onNavigateHome={() => handleNavigate('home')}
+              onNavigateLogin={() => handleNavigate('login')}
+            />
+          )}
+          {currentView === 'home' && (
+            <LandingPage
+              onExploreJobs={() => handleNavigate('browse-jobs')}
+              onOpenAtsScanner={handleOpenAtsScanner}
+            />
+          )}
+        </Suspense>
       </main>
 
       <Footer />
       <AuthModal />
 
       {/* Standalone AI ATS Resume Checker & Mistakes Modal */}
-      <StandaloneAtsScannerModal
-        isOpen={isAtsScannerOpen}
-        onClose={() => setIsAtsScannerOpen(false)}
-        onNavigateToBuilder={() => handleNavigate('resume-builder')}
-        onNavigateToJobs={() => handleNavigate('browse-jobs')}
-      />
+      <Suspense fallback={null}>
+        <StandaloneAtsScannerModal
+          isOpen={isAtsScannerOpen}
+          onClose={() => setIsAtsScannerOpen(false)}
+          onNavigateToBuilder={() => handleNavigate('resume-builder')}
+          onNavigateToJobs={() => handleNavigate('browse-jobs')}
+        />
+      </Suspense>
     </div>
   );
 };

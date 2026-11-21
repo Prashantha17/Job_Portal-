@@ -42,7 +42,7 @@ public class CandidateController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN', 'JOB_SEEKER')")
+    @PreAuthorize("hasAnyRole('RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN')")
     @Operation(summary = "Get candidate profile by ID for recruiters and administrators")
     public ResponseEntity<CandidateProfileResponse> getCandidateProfileById(@PathVariable Long id) {
         CandidateProfileResponse profile = profileService.getCandidateProfileById(id);
@@ -50,7 +50,7 @@ public class CandidateController {
     }
 
     @GetMapping("/by-email")
-    @PreAuthorize("hasAnyRole('RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN', 'JOB_SEEKER')")
+    @PreAuthorize("hasAnyRole('RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN')")
     @Operation(summary = "Get candidate profile by email for recruiters and administrators")
     public ResponseEntity<CandidateProfileResponse> getCandidateProfileByEmail(@RequestParam String email) {
         CandidateProfileResponse profile = profileService.getCandidateProfile(email);
@@ -197,9 +197,33 @@ public class CandidateController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
+    private void validateResumeAccess(com.talentflow.backend.document.ResumeDocument doc, String actorEmail, Authentication authentication) {
+        boolean isPrivileged = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_RECRUITER") ||
+                               a.getAuthority().equals("ROLE_HR_MANAGER") ||
+                               a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        if (isPrivileged) {
+            return;
+        }
+
+        if (doc.getCandidateProfileId() != null) {
+            try {
+                CandidateProfileResponse profile = profileService.getCandidateProfile(actorEmail);
+                if (profile != null && profile.getId().equals(doc.getCandidateProfileId())) {
+                    return;
+                }
+            } catch (Exception ignored) {}
+        }
+        throw new org.springframework.security.access.AccessDeniedException("You are not authorized to download this candidate's resume.");
+    }
+
     @GetMapping(value = "/resumes/{mongoId}/download", produces = { "application/pdf", "application/octet-stream", "*/*" })
+    @PreAuthorize("hasAnyRole('JOB_SEEKER', 'RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN')")
     @Operation(summary = "Download candidate resume directly from MongoDB document storage")
-    public ResponseEntity<byte[]> downloadResumeFromMongo(@PathVariable String mongoId) {
+    public ResponseEntity<byte[]> downloadResumeFromMongo(
+            @PathVariable String mongoId,
+            Authentication authentication) {
+        String actorEmail = getAuthenticatedEmail(authentication);
         java.util.Optional<com.talentflow.backend.document.ResumeDocument> docOpt = profileService.getResumeDocument(mongoId);
 
         // Fallback: If mongoId is numeric, try SQL ID lookup
@@ -209,6 +233,8 @@ public class CandidateController {
 
         com.talentflow.backend.document.ResumeDocument doc = docOpt
                 .orElseThrow(() -> new com.talentflow.backend.exception.ResourceNotFoundException("ResumeDocument", "id", mongoId));
+
+        validateResumeAccess(doc, actorEmail, authentication);
 
         String contentType = doc.getContentType() != null ? doc.getContentType() : "application/pdf";
         String fileName = doc.getFileName() != null ? doc.getFileName() : "Resume.pdf";
@@ -221,10 +247,16 @@ public class CandidateController {
     }
 
     @GetMapping(value = "/resumes/by-id/{resumeId}/download", produces = { "application/pdf", "application/octet-stream", "*/*" })
+    @PreAuthorize("hasAnyRole('JOB_SEEKER', 'RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN')")
     @Operation(summary = "Download candidate resume by SQL ID from MongoDB document storage")
-    public ResponseEntity<byte[]> downloadResumeBySqlId(@PathVariable Long resumeId) {
+    public ResponseEntity<byte[]> downloadResumeBySqlId(
+            @PathVariable Long resumeId,
+            Authentication authentication) {
+        String actorEmail = getAuthenticatedEmail(authentication);
         com.talentflow.backend.document.ResumeDocument doc = profileService.getResumeDocumentBySqlId(resumeId)
                 .orElseThrow(() -> new com.talentflow.backend.exception.ResourceNotFoundException("ResumeDocument", "resumeId", resumeId));
+
+        validateResumeAccess(doc, actorEmail, authentication);
 
         String contentType = doc.getContentType() != null ? doc.getContentType() : "application/pdf";
         String fileName = doc.getFileName() != null ? doc.getFileName() : "Resume.pdf";

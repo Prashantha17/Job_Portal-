@@ -63,6 +63,9 @@ public class ChatService {
         Application app = applicationRepository.findById(request.getApplicationId())
                 .orElseThrow(() -> new ResourceNotFoundException("Application", "id", request.getApplicationId()));
 
+        // Security assertion: verify sender is an authorized participant (Candidate, Recruiter, or Admin)
+        validateParticipant(app, senderEmail);
+
         User sender = userRepository.findByEmail(senderEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "email", senderEmail));
 

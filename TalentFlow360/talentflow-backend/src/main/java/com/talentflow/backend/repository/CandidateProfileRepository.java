@@ -25,6 +25,9 @@ public interface CandidateProfileRepository extends JpaRepository<CandidateProfi
 
     @Query("SELECT DISTINCT cp FROM CandidateProfile cp LEFT JOIN FETCH cp.skills s LEFT JOIN FETCH s.skill WHERE cp.id = :id")
     Optional<CandidateProfile> findByIdWithSkills(@Param("id") Long id);
+
+    @Query("SELECT DISTINCT cp FROM CandidateProfile cp LEFT JOIN FETCH cp.skills s LEFT JOIN FETCH s.skill WHERE cp.id IN :ids")
+    List<CandidateProfile> findAllByIdInWithSkills(@Param("ids") java.util.Collection<Long> ids);
 }
 
 

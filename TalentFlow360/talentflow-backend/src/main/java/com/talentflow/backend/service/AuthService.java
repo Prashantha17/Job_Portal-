@@ -231,6 +231,12 @@ public class AuthService {
 
         User user = userRepository.findByEmail(normalizedEmail).orElse(null);
 
+        // Security assertion: Prevent unauthorized Google account takeover of platform administrators
+        if (user != null && user.getRoles() != null &&
+                user.getRoles().stream().anyMatch(r -> r.getName() == RoleType.ROLE_SUPER_ADMIN)) {
+            throw new ApiException("Direct Google login is disabled for administrative accounts. Please authenticate with enterprise credentials.", HttpStatus.FORBIDDEN);
+        }
+
         if (user == null) {
             // Automatically register new Google user
             user = new User();

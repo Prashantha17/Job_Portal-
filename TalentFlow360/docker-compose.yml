@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # -------------------------------------------------------------
+  # 1. MySQL 8.0 Relational Database
+  # -------------------------------------------------------------
+  talentflow-mysql:
+    image: mysql:8.0
+    container_name: talentflow-mysql
+    restart: unless-stopped
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --max-connections=200
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-talentflow_db}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - talentflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root --password=$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # -------------------------------------------------------------
+  # 2. MongoDB 6.0 Document Store (Resumes, Unstructured Data)
+  # -------------------------------------------------------------
+  talentflow-mongo:
+    image: mongo:6.0
+    container_name: talentflow-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - talentflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.runCommand({ ping: 1 })' --quiet || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # -------------------------------------------------------------
+  # 3. TalentFlow 360 Spring Boot Backend (Java 21)
+  # -------------------------------------------------------------
+  talentflow-backend:
+    build:
+      context: ./talentflow-backend
+      dockerfile: Dockerfile
+    container_name: talentflow-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:mysql://talentflow-mysql:3306/${DB_NAME:-talentflow_db}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_PASSWORD}
+      MONGO_URI: mongodb://talentflow-mongo:27017/${MONGO_DB_NAME:-talentflow_resumes}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS:-604800000}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+    depends_on:
+      talentflow-mysql:
+        condition: service_healthy
+      talentflow-mongo:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - talentflow-network
+
+  # -------------------------------------------------------------
+  # 4. TalentFlow 360 React Frontend + Nginx Reverse Proxy
+  # -------------------------------------------------------------
+  talentflow-frontend:
+    build:
+      context: ./talentflow-frontend
+      dockerfile: Dockerfile
+    container_name: talentflow-frontend
+    restart: unless-stopped
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      - talentflow-backend
+    networks:
+      - talentflow-network
+
+# -------------------------------------------------------------
+# Named Persistent Storage Volumes
+# -------------------------------------------------------------
+volumes:
+  mysql_data:
+    driver: local
+  mongo_data:
+    driver: local
+  backend_uploads:
+    driver: local
+
+# -------------------------------------------------------------
+# Private Container Network (Isolated from Host Attack Vectors)
+# -------------------------------------------------------------
+networks:
+  talentflow-network:
+    driver: bridge

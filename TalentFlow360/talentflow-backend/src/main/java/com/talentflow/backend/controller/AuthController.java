@@ -20,10 +20,18 @@ public class AuthController {
 
     private final AuthService authService;
     private final com.talentflow.backend.service.OtpService otpService;
+    private final com.talentflow.backend.service.RateLimitingService rateLimitingService;
 
-    public AuthController(AuthService authService, com.talentflow.backend.service.OtpService otpService) {
+    @org.springframework.beans.factory.annotation.Value("${spring.profiles.active:dev}")
+    private String activeProfile;
+
+    public AuthController(AuthService authService,
+                          com.talentflow.backend.service.OtpService otpService,
+                          @org.springframework.beans.factory.annotation.Autowired(required = false)
+                          com.talentflow.backend.service.RateLimitingService rateLimitingService) {
         this.authService = authService;
         this.otpService = otpService;
+        this.rateLimitingService = rateLimitingService != null ? rateLimitingService : new com.talentflow.backend.service.RateLimitingService();
     }
 
     @PostMapping("/register")
@@ -38,6 +46,7 @@ public class AuthController {
     @PostMapping("/login")
     @Operation(summary = "User authentication (Login)", description = "Authenticates user credentials, verifies password, and returns signed JWT access & refresh tokens.")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
+        rateLimitingService.checkRateLimit("login:" + request.getEmail().toLowerCase().trim(), 15, 300);
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(ApiResponse.ok("Authentication successful", response));
     }
@@ -45,8 +54,19 @@ public class AuthController {
     @PostMapping("/send-otp")
     @Operation(summary = "Send OTP code to email", description = "Generates a 6-digit OTP and dispatches it directly to the user's email inbox.")
     public ResponseEntity<ApiResponse<String>> sendOtp(@Valid @RequestBody SendOtpRequest request) {
+        rateLimitingService.checkRateLimit("otp:" + request.getEmail().toLowerCase().trim(), 5, 300);
         otpService.generateAndSendOtp(request.getEmail(), request.getPurpose());
         return ResponseEntity.ok(ApiResponse.ok("Verification code has been sent directly to your email inbox (" + request.getEmail() + ")", "OTP_SENT"));
+    }
+
+    @GetMapping("/dev-otp")
+    @Operation(summary = "Get cached dev OTP", description = "Returns cached OTP for local testing/dev environments in O(1) time.")
+    public ResponseEntity<ApiResponse<String>> getDevOtp(@RequestParam String email) {
+        if ("prod".equalsIgnoreCase(activeProfile) || "production".equalsIgnoreCase(activeProfile)) {
+            throw new com.talentflow.backend.exception.ApiException("Endpoint disabled in production environment", org.springframework.http.HttpStatus.NOT_FOUND);
+        }
+        String cachedOtp = otpService.getDevOtp(email);
+        return ResponseEntity.ok(ApiResponse.ok("Dev OTP retrieved", cachedOtp));
     }
 
     @PostMapping("/login-otp")

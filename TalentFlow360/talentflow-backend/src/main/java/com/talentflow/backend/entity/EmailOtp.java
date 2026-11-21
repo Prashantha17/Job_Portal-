@@ -5,7 +5,8 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "email_otps", indexes = {
-        @Index(name = "idx_otp_email_purpose", columnList = "email, purpose")
+        @Index(name = "idx_otp_email_purpose", columnList = "email, purpose"),
+        @Index(name = "idx_otp_lookup", columnList = "email, purpose, is_used, expiry_time, created_at")
 })
 public class EmailOtp {
 

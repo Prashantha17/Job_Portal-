@@ -26,6 +26,13 @@ public class JwtTokenProvider {
     @Value("${app.jwt.expiration-ms:86400000}")
     private long jwtExpirationMs;
 
+    @jakarta.annotation.PostConstruct
+    public void validateJwtConfiguration() {
+        if ("404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970".equals(jwtSecret)) {
+            log.warn("⚠️ SECURITY WARNING: Application is using the default built-in JWT Secret. In production, configure JWT_SECRET via environment variable.");
+        }
+    }
+
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
     }

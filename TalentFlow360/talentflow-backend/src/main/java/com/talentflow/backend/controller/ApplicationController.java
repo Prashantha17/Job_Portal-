@@ -244,11 +244,35 @@ public class ApplicationController {
         return ResponseEntity.ok(ApiResponse.ok("Real-time ATS analysis calculated", analysis));
     }
 
+    private void validateApplicationDocumentAccess(Application app, String actorEmail, Authentication authentication) {
+        String candidateEmail = app.getCandidateEmail();
+        String recruiterEmail = (app.getJob() != null && app.getJob().getPostedBy() != null)
+                ? app.getJob().getPostedBy().getEmail() : null;
+
+        boolean isCandidate = candidateEmail != null && candidateEmail.equalsIgnoreCase(actorEmail);
+        boolean isRecruiter = recruiterEmail != null && recruiterEmail.equalsIgnoreCase(actorEmail);
+        if (isCandidate || isRecruiter) {
+            return;
+        }
+
+        boolean isAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        if (!isAdmin) {
+            throw new org.springframework.security.access.AccessDeniedException("You are not authorized to access documents for this application.");
+        }
+    }
+
     @GetMapping("/{id}/resume/download")
+    @PreAuthorize("hasAnyRole('JOB_SEEKER', 'RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN')")
     @Operation(summary = "Download resume for application", description = "Streams the resume file associated with this application from MongoDB.")
-    public ResponseEntity<byte[]> downloadApplicationResume(@PathVariable Long id) {
+    public ResponseEntity<byte[]> downloadApplicationResume(
+            @PathVariable Long id,
+            Authentication authentication) {
+        String actorEmail = getAuthenticatedEmail(authentication);
         Application app = applicationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Application", "id", id));
+
+        validateApplicationDocumentAccess(app, actorEmail, authentication);
 
         Optional<ResumeDocument> docOpt = Optional.empty();
         if (app.getResume() != null) {
@@ -298,8 +322,17 @@ public class ApplicationController {
     }
 
     @GetMapping("/{id}/offer-letter/download")
+    @PreAuthorize("hasAnyRole('JOB_SEEKER', 'RECRUITER', 'HR_MANAGER', 'SUPER_ADMIN')")
     @Operation(summary = "Download official offer letter PDF", description = "Streams the archived official Offer Letter PDF for this candidate/recruiter.")
-    public ResponseEntity<byte[]> downloadOfferLetter(@PathVariable Long id) {
+    public ResponseEntity<byte[]> downloadOfferLetter(
+            @PathVariable Long id,
+            Authentication authentication) {
+        String actorEmail = getAuthenticatedEmail(authentication);
+        Application app = applicationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Application", "id", id));
+
+        validateApplicationDocumentAccess(app, actorEmail, authentication);
+
         byte[] pdfBytes = applicationService.getOfferLetterPdfBytes(id);
         String fileName = "Offer_Letter_Application_" + id + ".pdf";
         return ResponseEntity.ok()

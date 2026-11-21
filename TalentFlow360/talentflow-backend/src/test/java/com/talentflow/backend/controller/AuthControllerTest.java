@@ -41,6 +41,9 @@ class AuthControllerTest {
     private com.talentflow.backend.service.OtpService otpService;
 
     @MockitoBean
+    private com.talentflow.backend.service.RateLimitingService rateLimitingService;
+
+    @MockitoBean
     private JwtTokenProvider jwtTokenProvider;
 
     @MockitoBean

@@ -144,6 +144,7 @@ public class MatchingEngineService {
 
     /**
      * Evaluates all applicants of a specific job and scores them for ATS prioritization.
+     * Optimized to O(1) database queries (batch fetch) + O(N) in-memory scoring, eliminating N+1 DB calls.
      */
     public List<CandidateMatchDto> getJobApplicantMatches(Long jobId) {
         Job job = jobRepository.findByIdWithDetails(jobId)
@@ -151,10 +152,28 @@ public class MatchingEngineService {
 
         List<Application> jobApplications = applicationRepository.findByJobIdOrderByAppliedAtDesc(jobId);
         List<CandidateMatchDto> matches = new ArrayList<>();
+        if (jobApplications.isEmpty()) {
+            return matches;
+        }
+
+        // Batch-fetch all unique candidate profiles in a single query (O(1) database roundtrip)
+        Set<Long> candidateProfileIds = jobApplications.stream()
+                .filter(app -> app.getCandidateProfile() != null && app.getCandidateProfile().getId() != null)
+                .map(app -> app.getCandidateProfile().getId())
+                .collect(Collectors.toSet());
+
+        Map<Long, CandidateProfile> candidateProfileMap = candidateProfileIds.isEmpty() ? Collections.emptyMap() :
+                candidateProfileRepository.findAllByIdInWithSkills(candidateProfileIds).stream()
+                        .collect(Collectors.toMap(CandidateProfile::getId, cp -> cp, (existing, replacement) -> existing));
 
         for (Application app : jobApplications) {
-            CandidateProfile candidate = candidateProfileRepository.findByIdWithSkills(app.getCandidateProfile().getId())
-                    .orElse(app.getCandidateProfile());
+            CandidateProfile candidate = (app.getCandidateProfile() != null && app.getCandidateProfile().getId() != null)
+                    ? candidateProfileMap.getOrDefault(app.getCandidateProfile().getId(), app.getCandidateProfile())
+                    : app.getCandidateProfile();
+
+            if (candidate == null) {
+                continue;
+            }
 
             MatchBreakdownDto breakdown = calculateMatch(candidate, job);
 
